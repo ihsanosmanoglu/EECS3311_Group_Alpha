@@ -3,7 +3,7 @@ EECS3311 Summer 25 Group Project "NutriSci: SwEATch to better!"
 
 
 google docs for assigment:
-https://docs.google.com/document/d/1i4MbL1MkOJIieaz2ETa91LMVq7FIBD9V2mzQ9TvEf4U/edit?usp=sharing
+https://docs.google.com/document/d/1-4DXywfOa_zAvEXl8py7I6jcrl-rifEA5fZwtvNrLMU/edit?usp=sharing
 
 
 figma rough desing:
