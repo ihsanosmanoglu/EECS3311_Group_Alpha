@@ -38,7 +38,8 @@ src/main/java/ca/nutrisci/
 ### Prerequisites
 - Java 11 or higher
 - Maven 3.6+
-- MySQL 8.0+ (optional, can use file-based storage)
+- MySQL 8.0+ (optional, can use file-based storage) (but will also work with others later in future)
+
 
 ### Building the Project
 ```bash
@@ -47,8 +48,9 @@ mvn clean compile
 
 ### Running the Application
 ```bash
-mvn javafx:run
+mvn javafx:run  
 ```
+Does not run yet, hopefully in future.
 
 ## 📊 Features
 
@@ -63,13 +65,7 @@ mvn javafx:run
 
 - **Canadian Nutrient File (CNF)**: Comprehensive nutrition database
 - **Canada Food Guide**: Official dietary recommendations
-- **Extensible**: Ready for additional API integrations
 
-## 🧪 Testing
-
-```bash
-mvn test
-```
 
 ## 📝 Documentation
 
@@ -77,10 +73,3 @@ mvn test
 - [API Documentation](docs/api/)
 - [User Guide](docs/user-guide.md)
 
-## 🤝 Contributing
-
-This is an academic project. Please follow the established architecture patterns and SOLID principles.
-
-## 📄 License
-
-Educational use only. 
