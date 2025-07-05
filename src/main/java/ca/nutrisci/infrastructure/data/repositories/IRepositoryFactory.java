@@ -1,11 +1,23 @@
 package ca.nutrisci.infrastructure.data.repositories;
 
 /**
- * IRepositoryFactory - Abstract factory interface for repositories
+ * IRepositoryFactory - Abstract factory for creating repository families
  * Part of the Infrastructure Layer - Abstract Factory Pattern
  */
 public interface IRepositoryFactory {
     
-    // TODO: Define abstract factory methods for creating repositories
+    /**
+     * Get profile repository
+     */
+    ProfileRepo getProfileRepository();
     
+    /**
+     * Get meal log repository
+     */
+    MealLogRepo getMealLogRepository();
+    
+    /**
+     * Get swap history repository
+     */
+    SwapHistoryRepo getSwapHistoryRepository();
 } 
