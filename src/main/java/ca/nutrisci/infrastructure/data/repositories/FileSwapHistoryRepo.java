@@ -211,4 +211,70 @@ public class FileSwapHistoryRepo implements SwapHistoryRepo {
                 .limit(limit)
                 .collect(Collectors.toList());
     }
+    
+    @Override
+    public int getSwapCount(UUID profileId) {
+        return countSwapsForProfile(profileId);
+    }
+    
+    // Stub implementations for SwapDTO methods - TODO: Implement properly
+    @Override
+    public void saveSwap(ca.nutrisci.application.dto.SwapDTO swap) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public void deleteSwap(UUID swapId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public ca.nutrisci.application.dto.SwapDTO findSwapById(UUID swapId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getSwapHistory(UUID profileId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getSwapsByDate(UUID profileId, java.time.LocalDate date) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getSwapsByTimeInterval(UUID profileId, java.time.LocalDate startDate, java.time.LocalDate endDate) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getSwapsByMealId(UUID mealId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public ca.nutrisci.application.dto.SwapDTO findSwapByMealAndIngredient(UUID mealId, String originalIngredient) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getAppliedSwaps(UUID profileId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getPendingSwaps(UUID profileId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public void markSwapAsApplied(UUID swapId) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
+    
+    @Override
+    public List<ca.nutrisci.application.dto.SwapDTO> getSwapsByGoal(UUID profileId, String goalType) {
+        throw new UnsupportedOperationException("SwapDTO operations not implemented yet");
+    }
 } 

@@ -2,237 +2,140 @@ package ca.nutrisci.application.services;
 
 import ca.nutrisci.application.dto.MealDTO;
 import ca.nutrisci.application.dto.NutrientInfo;
-import ca.nutrisci.application.services.observers.MealLogListener;
-import ca.nutrisci.domain.entities.Meal;
 import ca.nutrisci.infrastructure.external.adapters.INutritionGateway;
 
-import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 
 /**
- * MealLogService - Business logic for meal logging operations
- * Part of the Application Layer - Observer Pattern Subject
+ * MealLogService - Simple service for meal validation and business logic
+ * Follows SRP - only handles business rules and calculations
  */
 public class MealLogService {
     
-    private INutritionGateway nutritionGateway;
-    private List<MealLogListener> listeners;
-    
-    public MealLogService(INutritionGateway nutritionGateway) {
-        this.nutritionGateway = nutritionGateway;
-        this.listeners = new ArrayList<>();
-    }
+    // Valid meal types (DRY - centralized)
+    private static final String[] VALID_MEAL_TYPES = {"breakfast", "lunch", "dinner", "snack"};
     
     /**
-     * Validate meal data
+     * Validate a meal DTO - centralized validation (DRY)
      */
     public boolean validateMeal(MealDTO mealDTO) {
         if (mealDTO == null) return false;
-        if (mealDTO.getProfileId() == null) return false;
-        if (mealDTO.getMealType() == null || mealDTO.getMealType().trim().isEmpty()) return false;
-        if (mealDTO.getDate() == null) return false;
-        if (mealDTO.getIngredients().isEmpty()) return false;
-        if (mealDTO.getIngredients().size() != mealDTO.getQuantities().size()) return false;
         
-        // Check meal type is valid
-        if (!MealDTO.isValidMealType(mealDTO.getMealType())) return false;
+        // Check required fields
+        if (mealDTO.getProfileId() == null || 
+            mealDTO.getDate() == null || 
+            mealDTO.getMealType() == null || mealDTO.getMealType().trim().isEmpty()) {
+            return false;
+        }
         
-        // Check quantities are positive
-        for (Double quantity : mealDTO.getQuantities()) {
-            if (quantity == null || quantity <= 0) return false;
+        // Check ingredients list is not null (but can be empty)
+        if (mealDTO.getIngredients() == null) {
+            return false;
+        }
+        
+        // Check quantities match ingredients (both can be empty)
+        if (mealDTO.getQuantities() == null || 
+            mealDTO.getIngredients().size() != mealDTO.getQuantities().size()) {
+            return false;
+        }
+        
+        // Check valid meal type (DRY - using centralized method)
+        if (!isValidMealType(mealDTO.getMealType())) {
+            return false;
+        }
+        
+        // Check all quantities are positive (only if ingredients exist)
+        if (!mealDTO.getIngredients().isEmpty()) {
+            for (Double quantity : mealDTO.getQuantities()) {
+                if (quantity == null || quantity <= 0) {
+                    return false;
+                }
+            }
+            
+            // Check all ingredients are not empty (only if ingredients exist)
+            for (String ingredient : mealDTO.getIngredients()) {
+                if (ingredient == null || ingredient.trim().isEmpty()) {
+                    return false;
+                }
+            }
         }
         
         return true;
     }
     
     /**
-     * Calculate nutrients for a meal
+     * Calculate nutrients for a meal (simplified)
      */
-    public MealDTO calculateNutrients(MealDTO mealDTO, INutritionGateway gateway) {
-        if (!validateMeal(mealDTO)) return mealDTO;
-        
-        NutrientInfo totalNutrients = new NutrientInfo();
-        List<String> ingredients = mealDTO.getIngredients();
-        List<Double> quantities = mealDTO.getQuantities();
-        
-        for (int i = 0; i < ingredients.size(); i++) {
-            String ingredient = ingredients.get(i);
-            double quantity = quantities.get(i);
-            
-            // Get nutrition info for this ingredient
-            NutrientInfo ingredientNutrition = gateway.lookupIngredient(ingredient);
-            
-            // Scale by quantity (assuming quantity is in grams, nutrition per 100g)
-            NutrientInfo scaledNutrition = ingredientNutrition.multiply(quantity / 100.0);
-            
-            // Add to total
-            totalNutrients = totalNutrients.add(scaledNutrition);
+    public MealDTO calculateNutrients(MealDTO mealDTO, INutritionGateway nutritionGateway) {
+        if (mealDTO == null || nutritionGateway == null) {
+            return mealDTO;
         }
         
-        // Update meal with calculated nutrients
+        NutrientInfo totalNutrients = new NutrientInfo();
+        
+        for (int i = 0; i < mealDTO.getIngredients().size(); i++) {
+            String ingredient = mealDTO.getIngredients().get(i);
+            double quantity = mealDTO.getQuantities().get(i);
+            
+            NutrientInfo ingredientNutrients = nutritionGateway.lookupIngredient(ingredient);
+            if (ingredientNutrients != null) {
+                // Scale by quantity (per 100g)
+                NutrientInfo scaledNutrients = ingredientNutrients.multiply(quantity / 100.0);
+                totalNutrients = totalNutrients.add(scaledNutrients);
+            }
+        }
+        
         mealDTO.setNutrients(totalNutrients);
         return mealDTO;
     }
     
     /**
-     * Enforce one meal per type rule (except snacks)
+     * Calculate daily totals - simple aggregation
      */
-    public void enforceOneMealPerType(MealDTO mealDTO) {
-        if (mealDTO == null || "snack".equalsIgnoreCase(mealDTO.getMealType())) {
-            return; // Snacks are allowed multiple times per day
-        }
-        
-        // This would typically check existing meals in the repository
-        // For now, we'll just validate the meal type
-        String mealType = mealDTO.getMealType().toLowerCase();
-        if (!mealType.equals("breakfast") && !mealType.equals("lunch") && !mealType.equals("dinner")) {
-            throw new IllegalArgumentException("Invalid meal type: " + mealType);
-        }
-    }
-    
-    /**
-     * Enrich ingredients list with nutritional information
-     */
-    public NutrientInfo enrichWithNutrients(List<String> ingredients, INutritionGateway gateway) {
-        if (ingredients == null || ingredients.isEmpty()) {
+    public NutrientInfo calculateDailyTotals(List<MealDTO> meals) {
+        if (meals == null || meals.isEmpty()) {
             return new NutrientInfo();
         }
         
-        NutrientInfo totalNutrients = new NutrientInfo();
-        
-        for (String ingredient : ingredients) {
-            NutrientInfo ingredientNutrition = gateway.lookupIngredient(ingredient);
-            totalNutrients = totalNutrients.add(ingredientNutrition);
-        }
-        
-        return totalNutrients;
-    }
-    
-    /**
-     * Calculate daily totals for a profile
-     */
-    public NutrientInfo calculateDailyTotals(List<MealDTO> mealsForDay) {
-        if (mealsForDay == null || mealsForDay.isEmpty()) {
-            return new NutrientInfo();
-        }
-        
-        NutrientInfo dailyTotal = new NutrientInfo();
-        
-        for (MealDTO meal : mealsForDay) {
+        NutrientInfo dailyTotals = new NutrientInfo();
+        for (MealDTO meal : meals) {
             if (meal.getNutrients() != null) {
-                dailyTotal = dailyTotal.add(meal.getNutrients());
+                dailyTotals = dailyTotals.add(meal.getNutrients());
             }
         }
         
-        return dailyTotal;
+        return dailyTotals;
     }
     
     /**
-     * Get meal recommendations based on time and existing meals
+     * Check if meal type is valid (DRY - centralized)
      */
-    public String getMealRecommendation(UUID profileId, String mealType, LocalDate date) {
-        String type = mealType.toLowerCase();
+    public static boolean isValidMealType(String mealType) {
+        if (mealType == null) return false;
         
-        switch (type) {
-            case "breakfast":
-                return "Include whole grains, protein, and fruits for sustained energy";
-            case "lunch":
-                return "Balance proteins, vegetables, and complex carbohydrates";
-            case "dinner":
-                return "Focus on lean proteins and vegetables, lighter on carbs";
-            case "snack":
-                return "Choose nutrient-dense options like fruits, nuts, or yogurt";
-            default:
-                return "Aim for balanced nutrition with variety of food groups";
-        }
-    }
-    
-    /**
-     * Convert domain entity to DTO
-     */
-    public MealDTO toDTO(Meal meal) {
-        if (meal == null) return null;
-        
-        return new MealDTO(
-            meal.getId(),
-            meal.getProfileId(),
-            meal.getDate(),
-            meal.getMealType(),
-            meal.getIngredients(),
-            meal.getQuantities(),
-            meal.getNutrients()
-        );
-    }
-    
-    /**
-     * Convert DTO to domain entity
-     */
-    public Meal fromDTO(MealDTO dto) {
-        if (dto == null) return null;
-        
-        return new Meal(
-            dto.getId(),
-            dto.getProfileId(),
-            dto.getDate(),
-            dto.getMealType(),
-            dto.getIngredients(),
-            dto.getQuantities(),
-            dto.getNutrients(),
-            null // createdAt will be set by entity
-        );
-    }
-    
-    // Observer pattern methods
-    
-    /**
-     * Add listener for meal log events
-     */
-    public void addListener(MealLogListener listener) {
-        if (listener != null && !listeners.contains(listener)) {
-            listeners.add(listener);
-        }
-    }
-    
-    /**
-     * Remove listener
-     */
-    public void removeListener(MealLogListener listener) {
-        listeners.remove(listener);
-    }
-    
-    /**
-     * Notify listeners when meal is logged
-     */
-    public void notifyMealLogged(MealDTO meal) {
-        for (MealLogListener listener : listeners) {
-            try {
-                listener.onMealLogged(meal);
-            } catch (Exception e) {
-                System.err.println("Error notifying listener: " + e.getMessage());
+        String lowerType = mealType.toLowerCase();
+        for (String validType : VALID_MEAL_TYPES) {
+            if (validType.equals(lowerType)) {
+                return true;
             }
         }
+        return false;
     }
     
     /**
-     * Process meal logging with notifications
+     * Get meal summary - simple formatting
      */
-    public MealDTO processMealLogging(MealDTO meal) {
-        // Validate meal
-        if (!validateMeal(meal)) {
-            throw new IllegalArgumentException("Invalid meal data");
+    public String getMealSummary(MealDTO meal) {
+        if (meal == null) return "Invalid meal";
+        
+        StringBuilder summary = new StringBuilder();
+        summary.append(meal.getMealType().toUpperCase()).append(" (").append(meal.getDate()).append("): ");
+        summary.append(String.join(", ", meal.getIngredients()));
+        
+        if (meal.getNutrients() != null) {
+            summary.append(" - ").append(String.format("%.0f calories", meal.getNutrients().getCalories()));
         }
         
-        // Calculate nutrients
-        MealDTO enrichedMeal = calculateNutrients(meal, nutritionGateway);
-        
-        // Enforce business rules
-        enforceOneMealPerType(enrichedMeal);
-        
-        // Notify listeners (for background calculations)
-        notifyMealLogged(enrichedMeal);
-        
-        return enrichedMeal;
+        return summary.toString();
     }
 } 

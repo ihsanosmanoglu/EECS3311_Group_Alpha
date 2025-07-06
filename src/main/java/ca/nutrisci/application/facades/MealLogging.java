@@ -3,9 +3,9 @@ package ca.nutrisci.application.facades;
 import ca.nutrisci.application.dto.MealDTO;
 import ca.nutrisci.application.dto.NutrientInfo;
 import ca.nutrisci.application.services.MealLogService;
-import ca.nutrisci.application.services.observers.DailyTotalsCalculator;
-import ca.nutrisci.domain.entities.Meal;
+import ca.nutrisci.infrastructure.data.repositories.IRepositoryFactory;
 import ca.nutrisci.infrastructure.data.repositories.MealLogRepo;
+import ca.nutrisci.infrastructure.data.repositories.ProfileRepo;
 import ca.nutrisci.infrastructure.external.adapters.INutritionGateway;
 
 import java.time.LocalDate;
@@ -14,337 +14,272 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * MealLogging - Facade for all meal logging operations
+ * MealLogging - Facade for meal logging operations
  * Part of the Application Layer - Facade Pattern
- * This is the main entry point for UI meal operations
+ * Coordinates between service layer, repositories, and external adapters
  */
 public class MealLogging implements IMealLogFacade {
     
-    private MealLogService mealLogService;
-    private MealLogRepo mealLogRepo;
-    private INutritionGateway nutritionGateway;
-    private DailyTotalsCalculator dailyTotalsCalculator;
+    private final MealLogService mealLogService;
+    private final MealLogRepo mealLogRepo;
+    private final ProfileRepo profileRepo;
+    private final INutritionGateway nutritionGateway;
     
-    public MealLogging(MealLogService mealLogService, MealLogRepo mealLogRepo, 
-                       INutritionGateway nutritionGateway, DailyTotalsCalculator dailyTotalsCalculator) {
-        this.mealLogService = mealLogService;
-        this.mealLogRepo = mealLogRepo;
+    public MealLogging(IRepositoryFactory repoFactory, INutritionGateway nutritionGateway) {
+        this.mealLogService = new MealLogService(); // Simplified - no dependencies needed
+        this.mealLogRepo = repoFactory.getMealLogRepository();
+        this.profileRepo = repoFactory.getProfileRepository();
         this.nutritionGateway = nutritionGateway;
-        this.dailyTotalsCalculator = dailyTotalsCalculator;
     }
     
-    /**
-     * Log a new meal
-     */
     @Override
-    public MealDTO logMeal(UUID profileId, LocalDate date, String mealType, 
-                          List<String> ingredients, List<Double> quantities) {
-        
-        // Validate inputs
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
+    public MealDTO addMeal(MealDTO meal) {
+        // Validate the meal
+        if (!mealLogService.validateMeal(meal)) {
+            throw new IllegalArgumentException("Invalid meal data");
         }
         
-        if (date == null) {
-            throw new IllegalArgumentException("Date cannot be null");
+        // Enforce business rule: only one meal per type per day (except snacks)
+        if (!"snack".equalsIgnoreCase(meal.getMealType())) {
+            List<MealDTO> existingMeals = mealLogRepo.getMealsByTypeAndDate(
+                meal.getProfileId(), meal.getDate(), meal.getMealType());
+            if (!existingMeals.isEmpty()) {
+                throw new IllegalArgumentException("A " + meal.getMealType() + " meal already exists for this date");
+            }
         }
         
-        if (mealType == null || mealType.trim().isEmpty()) {
-            throw new IllegalArgumentException("Meal type cannot be empty");
-        }
+        // Calculate nutrients using the nutrition gateway
+        MealDTO mealWithNutrients = mealLogService.calculateNutrients(meal, nutritionGateway);
         
-        if (ingredients == null || ingredients.isEmpty()) {
-            throw new IllegalArgumentException("Ingredients cannot be empty");
-        }
-        
-        if (quantities == null || quantities.isEmpty()) {
-            throw new IllegalArgumentException("Quantities cannot be empty");
-        }
-        
-        if (ingredients.size() != quantities.size()) {
-            throw new IllegalArgumentException("Ingredients and quantities must have the same count");
-        }
-        
-        // Create meal DTO
-        MealDTO mealDTO = new MealDTO(
-            UUID.randomUUID(),
-            profileId,
-            date,
-            mealType.trim().toLowerCase(),
-            ingredients.stream().map(String::trim).collect(Collectors.toList()),
-            quantities,
-            null // nutrients will be calculated
-        );
-        
-        // Process the meal (validate, calculate nutrients, notify observers)
-        MealDTO processedMeal = mealLogService.processMealLogging(mealDTO);
-        
-        // Save to repository
-        Meal meal = mealLogService.fromDTO(processedMeal);
-        Meal savedMeal = mealLogRepo.save(meal);
-        
-        return mealLogService.toDTO(savedMeal);
+        // Save the meal
+        return mealLogRepo.addMeal(mealWithNutrients);
     }
     
-    /**
-     * Get meal by ID
-     */
     @Override
-    public MealDTO getMeal(UUID mealId) {
-        if (mealId == null) {
-            throw new IllegalArgumentException("Meal ID cannot be null");
-        }
-        
-        Meal meal = mealLogRepo.findById(mealId);
-        if (meal == null) {
+    public MealDTO editMeal(UUID mealId, MealDTO updatedMeal) {
+        // Check if meal exists
+        if (!mealLogRepo.mealExists(mealId)) {
             throw new IllegalArgumentException("Meal not found: " + mealId);
         }
         
-        return mealLogService.toDTO(meal);
-    }
-    
-    /**
-     * Update an existing meal
-     */
-    @Override
-    public MealDTO updateMeal(UUID mealId, List<String> ingredients, List<Double> quantities) {
-        if (mealId == null) {
-            throw new IllegalArgumentException("Meal ID cannot be null");
+        // Validate the updated meal
+        if (!mealLogService.validateMeal(updatedMeal)) {
+            throw new IllegalArgumentException("Invalid meal data");
         }
         
-        if (ingredients == null || ingredients.isEmpty()) {
-            throw new IllegalArgumentException("Ingredients cannot be empty");
-        }
-        
-        if (quantities == null || quantities.isEmpty()) {
-            throw new IllegalArgumentException("Quantities cannot be empty");
-        }
-        
-        if (ingredients.size() != quantities.size()) {
-            throw new IllegalArgumentException("Ingredients and quantities must have the same count");
-        }
-        
-        // Get existing meal
-        Meal existingMeal = mealLogRepo.findById(mealId);
+        // Get the existing meal to preserve the original profile ID and date if needed
+        MealDTO existingMeal = mealLogRepo.getSingleMealById(mealId);
         if (existingMeal == null) {
             throw new IllegalArgumentException("Meal not found: " + mealId);
         }
         
-        // Create updated meal DTO
-        MealDTO updatedMealDTO = new MealDTO(
-            mealId,
-            existingMeal.getProfileId(),
-            existingMeal.getDate(),
-            existingMeal.getMealType(),
-            ingredients.stream().map(String::trim).collect(Collectors.toList()),
-            quantities,
-            null // nutrients will be recalculated
-        );
-        
-        // Calculate new nutrients
-        MealDTO enrichedMeal = mealLogService.calculateNutrients(updatedMealDTO, nutritionGateway);
-        
-        // Update and save
-        Meal updatedMeal = mealLogService.fromDTO(enrichedMeal);
-        Meal savedMeal = mealLogRepo.update(updatedMeal);
-        
-        return mealLogService.toDTO(savedMeal);
-    }
-    
-    /**
-     * Delete a meal
-     */
-    @Override
-    public void deleteMeal(UUID mealId) {
-        if (mealId == null) {
-            throw new IllegalArgumentException("Meal ID cannot be null");
+        // Enforce business rule for meal type changes
+        if (!"snack".equalsIgnoreCase(updatedMeal.getMealType())) {
+            List<MealDTO> existingMeals = mealLogRepo.getMealsByTypeAndDate(
+                updatedMeal.getProfileId(), updatedMeal.getDate(), updatedMeal.getMealType());
+            
+            // Filter out the current meal being edited
+            existingMeals = existingMeals.stream()
+                .filter(m -> !m.getId().equals(mealId))
+                .collect(Collectors.toList());
+            
+            if (!existingMeals.isEmpty()) {
+                throw new IllegalArgumentException("A " + updatedMeal.getMealType() + " meal already exists for this date");
+            }
         }
         
-        Meal meal = mealLogRepo.findById(mealId);
-        if (meal == null) {
+        // Check if meal is empty after editing - if so, delete it instead of saving
+        if (updatedMeal.getIngredients().isEmpty()) {
+            // Delete the meal instead of saving an empty one
+            mealLogRepo.deleteMeal(mealId);
+            return null; // Return null to indicate meal was deleted
+        }
+        
+        // Recalculate nutrients
+        MealDTO mealWithNutrients = mealLogService.calculateNutrients(updatedMeal, nutritionGateway);
+        
+        // Update the meal
+        return mealLogRepo.editMeal(mealId, mealWithNutrients);
+    }
+    
+    @Override
+    public void deleteMeal(UUID mealId) {
+        if (!mealLogRepo.mealExists(mealId)) {
             throw new IllegalArgumentException("Meal not found: " + mealId);
         }
         
-        mealLogRepo.delete(mealId);
+        mealLogRepo.deleteMeal(mealId);
     }
     
-    /**
-     * Get all meals for a profile
-     */
+    @Override
+    public List<MealDTO> fetchMeals(LocalDate startDate, LocalDate endDate) {
+        UUID activeProfileId = getActiveProfileId();
+        if (activeProfileId == null) {
+            throw new IllegalStateException("No active profile found");
+        }
+        
+        return mealLogRepo.getMealsByTimeInterval(activeProfileId, startDate, endDate);
+    }
+    
+    @Override
+    public List<MealDTO> getMealsForDate(LocalDate date) {
+        UUID activeProfileId = getActiveProfileId();
+        if (activeProfileId == null) {
+            throw new IllegalStateException("No active profile found");
+        }
+        
+        return mealLogRepo.getMealsByDate(activeProfileId, date);
+    }
+    
+    @Override
+    public List<MealDTO> getAllMeals() {
+        UUID activeProfileId = getActiveProfileId();
+        if (activeProfileId == null) {
+            throw new IllegalStateException("No active profile found");
+        }
+        
+        return mealLogRepo.getMealLogHistory(activeProfileId);
+    }
+    
+    @Override
+    public MealDTO getMealById(UUID mealId) {
+        return mealLogRepo.getSingleMealById(mealId);
+    }
+    
+    @Override
+    public String getDailyNutritionSummary(UUID profileId, LocalDate date) {
+        List<MealDTO> mealsForDay = mealLogRepo.getMealsByDate(profileId, date);
+        
+        if (mealsForDay.isEmpty()) {
+            return "No meals logged for " + date;
+        }
+        
+        NutrientInfo dailyTotals = mealLogService.calculateDailyTotals(mealsForDay);
+        
+        return String.format("Daily Summary for %s:\n" +
+                "Meals: %d\n" +
+                "Total Calories: %.0f\n" +
+                "Protein: %.1fg\n" +
+                "Carbs: %.1fg\n" +
+                "Fat: %.1fg\n" +
+                "Fiber: %.1fg",
+                date, mealsForDay.size(),
+                dailyTotals.getCalories(),
+                dailyTotals.getProtein(),
+                dailyTotals.getCarbs(),
+                dailyTotals.getFat(),
+                dailyTotals.getFiber());
+    }
+    
+    @Override
+    public boolean mealTypeExistsForDate(UUID profileId, LocalDate date, String mealType) {
+        List<MealDTO> existingMeals = mealLogRepo.getMealsByTypeAndDate(profileId, date, mealType);
+        return !existingMeals.isEmpty();
+    }
+    
     @Override
     public List<MealDTO> getMealsForProfile(UUID profileId) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        List<Meal> meals = mealLogRepo.findByProfileId(profileId);
-        return meals.stream()
-                .map(mealLogService::toDTO)
-                .collect(Collectors.toList());
+        return mealLogRepo.getMealLogHistory(profileId);
     }
     
-    /**
-     * Get meals for a specific date
-     */
-    @Override
-    public List<MealDTO> getMealsForDate(UUID profileId, LocalDate date) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        if (date == null) {
-            throw new IllegalArgumentException("Date cannot be null");
-        }
-        
-        List<Meal> meals = mealLogRepo.findByProfileIdAndDate(profileId, date);
-        return meals.stream()
-                .map(mealLogService::toDTO)
-                .collect(Collectors.toList());
-    }
-    
-    /**
-     * Get meals for a date range
-     */
-    @Override
-    public List<MealDTO> getMealsForDateRange(UUID profileId, LocalDate startDate, LocalDate endDate) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        if (startDate == null || endDate == null) {
-            throw new IllegalArgumentException("Start and end dates cannot be null");
-        }
-        
-        if (startDate.isAfter(endDate)) {
-            throw new IllegalArgumentException("Start date must be before end date");
-        }
-        
-        List<Meal> meals = mealLogRepo.findByProfileIdAndDateRange(profileId, startDate, endDate);
-        return meals.stream()
-                .map(mealLogService::toDTO)
-                .collect(Collectors.toList());
-    }
-    
-    /**
-     * Get meals by type
-     */
-    @Override
-    public List<MealDTO> getMealsByType(UUID profileId, String mealType) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        if (mealType == null || mealType.trim().isEmpty()) {
-            throw new IllegalArgumentException("Meal type cannot be empty");
-        }
-        
-        List<Meal> meals = mealLogRepo.findByProfileIdAndMealType(profileId, mealType.trim().toLowerCase());
-        return meals.stream()
-                .map(mealLogService::toDTO)
-                .collect(Collectors.toList());
-    }
-    
-    /**
-     * Calculate daily nutrition totals
-     */
-    @Override
-    public NutrientInfo getDailyTotals(UUID profileId, LocalDate date) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        if (date == null) {
-            throw new IllegalArgumentException("Date cannot be null");
-        }
-        
-        return dailyTotalsCalculator.getDailyTotals(profileId, date);
-    }
-    
-    /**
-     * Get meal recommendations
-     */
     @Override
     public String getMealRecommendations(UUID profileId, String mealType, LocalDate date) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
+        // Get existing meals for the day
+        List<MealDTO> existingMeals = mealLogRepo.getMealsByDate(profileId, date);
+        
+        if (existingMeals.isEmpty()) {
+            return "Consider starting with a balanced " + mealType + " including proteins, carbs, and vegetables.";
         }
         
-        if (mealType == null || mealType.trim().isEmpty()) {
-            throw new IllegalArgumentException("Meal type cannot be empty");
+        // Calculate what's been consumed so far
+        NutrientInfo consumedNutrients = mealLogService.calculateDailyTotals(existingMeals);
+        
+        // Basic recommendations based on consumed nutrients
+        StringBuilder recommendations = new StringBuilder();
+        recommendations.append("Recommendations for your ").append(mealType).append(":\n");
+        
+        if (consumedNutrients.getProtein() < 20) {
+            recommendations.append("- Consider adding protein (chicken, fish, eggs, or legumes)\n");
         }
         
-        if (date == null) {
-            throw new IllegalArgumentException("Date cannot be null");
+        if (consumedNutrients.getFiber() < 10) {
+            recommendations.append("- Add more fiber with vegetables or whole grains\n");
         }
         
-        return mealLogService.getMealRecommendation(profileId, mealType.trim(), date);
+        if (consumedNutrients.getCalories() < 800) {
+            recommendations.append("- You may need more calories for sustained energy\n");
+        }
+        
+        return recommendations.toString();
     }
     
     /**
-     * Get nutrition summary for a day
+     * Get the active profile ID
      */
+    private UUID getActiveProfileId() {
+        try {
+            // Get the active profile from the profile repository
+            ca.nutrisci.domain.entities.Profile activeProfile = profileRepo.findActiveProfile();
+            if (activeProfile != null) {
+                return activeProfile.getId();
+            }
+            return null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+    
     @Override
-    public String getDailySummary(UUID profileId, LocalDate date) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        if (date == null) {
-            throw new IllegalArgumentException("Date cannot be null");
-        }
-        
-        return dailyTotalsCalculator.getDailySummary(profileId, date);
+    public List<MealDTO> getMealsForDateRange(UUID profileId, LocalDate startDate, LocalDate endDate) {
+        return mealLogRepo.getMealsByTimeInterval(profileId, startDate, endDate);
     }
     
-    /**
-     * Check if calorie target is met
-     */
     @Override
-    public boolean meetsCalorieTarget(UUID profileId, LocalDate date, double targetCalories) {
-        if (profileId == null) {
-            throw new IllegalArgumentException("Profile ID cannot be null");
-        }
-        
-        if (date == null) {
-            throw new IllegalArgumentException("Date cannot be null");
-        }
-        
-        if (targetCalories <= 0) {
-            throw new IllegalArgumentException("Target calories must be positive");
-        }
-        
-        return dailyTotalsCalculator.meetsCalorieTarget(profileId, date, targetCalories);
+    public List<MealDTO> getMealsByType(UUID profileId, String mealType) {
+        List<MealDTO> allMeals = mealLogRepo.getMealLogHistory(profileId);
+        return allMeals.stream()
+            .filter(meal -> meal.getMealType().equalsIgnoreCase(mealType))
+            .collect(Collectors.toList());
     }
     
-    /**
-     * Validate meal data
-     */
+    @Override
+    public NutrientInfo getDailyTotals(UUID profileId, LocalDate date) {
+        List<MealDTO> mealsForDay = mealLogRepo.getMealsByDate(profileId, date);
+        return mealLogService.calculateDailyTotals(mealsForDay);
+    }
+    
     @Override
     public boolean validateMeal(MealDTO mealDTO) {
         return mealLogService.validateMeal(mealDTO);
     }
     
-    /**
-     * Get ingredient nutrition info
-     */
     @Override
     public NutrientInfo getIngredientNutrition(String ingredient) {
-        if (ingredient == null || ingredient.trim().isEmpty()) {
-            throw new IllegalArgumentException("Ingredient cannot be empty");
+        return nutritionGateway.lookupIngredient(ingredient);
+    }
+    
+    @Override
+    public NutrientInfo enrichIngredients(List<String> ingredients) {
+        // Simple implementation - directly use nutrition gateway
+        NutrientInfo totalNutrients = new NutrientInfo();
+        for (String ingredient : ingredients) {
+            NutrientInfo ingredientNutrients = nutritionGateway.lookupIngredient(ingredient);
+            if (ingredientNutrients != null) {
+                totalNutrients = totalNutrients.add(ingredientNutrients);
+            }
         }
-        
-        return nutritionGateway.lookupIngredient(ingredient.trim());
+        return totalNutrients;
     }
     
     /**
-     * Enrich ingredients with nutrition data
+     * Get detailed meal summary
      */
-    @Override
-    public NutrientInfo enrichIngredients(List<String> ingredients) {
-        if (ingredients == null || ingredients.isEmpty()) {
-            throw new IllegalArgumentException("Ingredients cannot be empty");
+    public String getDetailedMealSummary(UUID mealId) {
+        MealDTO meal = mealLogRepo.getSingleMealById(mealId);
+        if (meal == null) {
+            return "Meal not found";
         }
         
-        return mealLogService.enrichWithNutrients(ingredients, nutritionGateway);
+        return mealLogService.getMealSummary(meal);
     }
 } 

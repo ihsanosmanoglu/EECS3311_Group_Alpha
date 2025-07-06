@@ -1,0 +1,4 @@
+id,profileId,date,mealType,ingredients,quantities,nutrients
+fcc13b55-7b95-4144-9f98-9301f2fc34fa,88ffa1b2-b4f2-45db-8d52-3af4abed703d,2025-07-05,breakfast,"["Milk"]","[100.0]","{"calories":0.0,"protein":0.0,"carbs":0.0,"fat":0.0,"fiber":0.0}"
+604d7a81-dbbd-4b51-90dd-3f193dee2122,88ffa1b2-b4f2-45db-8d52-3af4abed703d,2025-07-09,breakfast,"["Butter"]","[100.0]","{"calories":0.0,"protein":0.0,"carbs":0.0,"fat":0.0,"fiber":0.0}"
+515ddf59-5632-4e98-9630-9fb67e829e46,88ffa1b2-b4f2-45db-8d52-3af4abed703d,2025-07-05,lunch,"["salmon","rice, spanish rice mix, prepared","ice cream cone, cake or wafer-type"]","[500.0,500.0,500.0]","{"calories":3750.0,"protein":156.85,"carbs":508.7,"fat":111.4,"fiber":22.5}"

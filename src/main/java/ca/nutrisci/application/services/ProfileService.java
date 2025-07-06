@@ -1,9 +1,11 @@
 package ca.nutrisci.application.services;
 
 import ca.nutrisci.application.dto.ProfileDTO;
+import ca.nutrisci.application.services.observers.ProfileChangeListener;
 import ca.nutrisci.domain.entities.Profile;
 import ca.nutrisci.infrastructure.data.repositories.ProfileRepo;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -15,9 +17,11 @@ import java.util.stream.Collectors;
 public class ProfileService {
     
     private ProfileRepo profileRepo;
+    private List<ProfileChangeListener> listeners;
     
     public ProfileService(ProfileRepo profileRepo) {
         this.profileRepo = profileRepo;
+        this.listeners = new ArrayList<>();
     }
     
     /**
@@ -64,6 +68,12 @@ public class ProfileService {
         
         if ("metric".equals(units) || "imperial".equals(units)) {
             profileRepo.updateProfileSettings(profileId, units);
+            
+            // Notify listeners of profile update
+            Profile updatedProfile = profileRepo.findById(profileId);
+            if (updatedProfile != null) {
+                notifyProfileUpdated(toDTO(updatedProfile));
+            }
         }
     }
     
@@ -73,11 +83,23 @@ public class ProfileService {
     public void setActiveProfile(UUID profileId) {
         if (profileId == null) return;
         
-        // Deactivate all profiles first
-        profileRepo.deactivateAllProfiles();
+        // Get the old active profile for notification
+        Profile oldActiveProfile = profileRepo.findActiveProfile();
         
-        // Activate the selected profile
+        // The activateProfile method now handles deactivating all profiles first
+        // in a single transaction to avoid conflicts
         profileRepo.activateProfile(profileId);
+        
+        // Get the newly activated profile
+        Profile newActiveProfile = profileRepo.findById(profileId);
+        
+        // Notify listeners of the profile changes
+        if (oldActiveProfile != null) {
+            notifyProfileDeactivated(toDTO(oldActiveProfile));
+        }
+        if (newActiveProfile != null) {
+            notifyProfileActivated(toDTO(newActiveProfile));
+        }
     }
     
     /**
@@ -143,5 +165,88 @@ public class ProfileService {
         return profiles.stream()
                 .map(this::toDTO)
                 .collect(Collectors.toList());
+    }
+    
+    // Observer pattern methods (DD-8)
+    
+    /**
+     * Add listener for profile change events
+     */
+    public void addProfileChangeListener(ProfileChangeListener listener) {
+        if (listener != null && !listeners.contains(listener)) {
+            listeners.add(listener);
+        }
+    }
+    
+    /**
+     * Remove listener for profile change events
+     */
+    public void removeProfileChangeListener(ProfileChangeListener listener) {
+        listeners.remove(listener);
+    }
+    
+    /**
+     * Notify listeners when a profile is activated
+     */
+    private void notifyProfileActivated(ProfileDTO profile) {
+        for (ProfileChangeListener listener : listeners) {
+            try {
+                listener.onProfileActivated(profile);
+            } catch (Exception e) {
+                System.err.println("Error notifying profile activation listener: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Notify listeners when a profile is deactivated
+     */
+    private void notifyProfileDeactivated(ProfileDTO profile) {
+        for (ProfileChangeListener listener : listeners) {
+            try {
+                listener.onProfileDeactivated(profile);
+            } catch (Exception e) {
+                System.err.println("Error notifying profile deactivation listener: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Notify listeners when a profile is created
+     */
+    private void notifyProfileCreated(ProfileDTO profile) {
+        for (ProfileChangeListener listener : listeners) {
+            try {
+                listener.onProfileCreated(profile);
+            } catch (Exception e) {
+                System.err.println("Error notifying profile creation listener: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Notify listeners when a profile is updated
+     */
+    private void notifyProfileUpdated(ProfileDTO profile) {
+        for (ProfileChangeListener listener : listeners) {
+            try {
+                listener.onProfileUpdated(profile);
+            } catch (Exception e) {
+                System.err.println("Error notifying profile update listener: " + e.getMessage());
+            }
+        }
+    }
+    
+    /**
+     * Notify listeners when a profile is deleted
+     */
+    private void notifyProfileDeleted(String profileId) {
+        for (ProfileChangeListener listener : listeners) {
+            try {
+                listener.onProfileDeleted(profileId);
+            } catch (Exception e) {
+                System.err.println("Error notifying profile deletion listener: " + e.getMessage());
+            }
+        }
     }
 } 

@@ -5,9 +5,17 @@ import ca.nutrisci.application.facades.ProfileManagement;
 import ca.nutrisci.application.services.ProfileService;
 import ca.nutrisci.infrastructure.data.repositories.FileRepoFactory;
 import ca.nutrisci.infrastructure.data.repositories.IRepositoryFactory;
+import ca.nutrisci.infrastructure.data.repositories.JdbcRepoFactory;
 import ca.nutrisci.infrastructure.data.repositories.ProfileRepo;
 import ca.nutrisci.presentation.controllers.ProfileController;
 import ca.nutrisci.presentation.mediator.NavigationMediator;
+import ca.nutrisci.application.facades.IMealLogFacade;
+import ca.nutrisci.application.facades.MealLogging;
+import ca.nutrisci.application.services.MealLogService;
+import ca.nutrisci.infrastructure.data.repositories.MealLogRepo;
+import ca.nutrisci.infrastructure.external.adapters.INutritionGateway;
+import ca.nutrisci.infrastructure.external.adapters.ExternalAdapter;
+import ca.nutrisci.presentation.controllers.MealLogController;
 import javax.swing.*;
 import java.awt.*;
 
@@ -62,7 +70,7 @@ public class MainApplication {
         // 5. Initialize Layers and Dependencies
         // This is where we wire everything together according to our clean architecture.
         // The UI (Presentation) depends on Controllers, which depend on Facades (Application).
-        IRepositoryFactory repoFactory = new FileRepoFactory("data/app");
+        IRepositoryFactory repoFactory = new JdbcRepoFactory();
         
         // Profile Management Dependencies
         ProfileRepo profileRepo = repoFactory.getProfileRepository();
@@ -70,11 +78,29 @@ public class MainApplication {
         IProfileFacade profileFacade = new ProfileManagement(profileService, profileRepo);
         ProfileController profileController = new ProfileController(profileFacade);
         
+        // Meal Logging Dependencies
+        INutritionGateway nutritionGateway = ExternalAdapter.getInstance("Canada Nutrient File-20250622");
+        IMealLogFacade mealLogFacade = new MealLogging(repoFactory, nutritionGateway);
+        
         // 6. Create and add the different UI panels (screens)
         ProfilePanel profilePanel = new ProfilePanel(profileController);
         
-        JPanel mealLogPanel = new JPanel();
-        mealLogPanel.add(new JLabel("Meal Logging Screen"));
+        // Get the active profile (or null if none exists)
+        ca.nutrisci.application.dto.ProfileDTO activeProfile = profileFacade.getActiveProfile();
+        
+        // Create MealLogPanel with required dependencies
+        MealLogPanel mealLogPanel = new MealLogPanel(mealLogFacade, activeProfile);
+        MealLogController mealLogController = new MealLogController(mealLogPanel);
+        
+        // Register MealLogPanel as a ProfileChangeListener (Observer pattern - DD-8)
+        profileService.addProfileChangeListener(mealLogPanel);
+        
+        // Set facades on the meal log controller
+        mealLogController.setMealLogFacade(mealLogFacade);
+        mealLogController.setProfileFacade(profileFacade);
+        
+        // Initialize the controller
+        mealLogController.initialize();
         
         JPanel swapPanel = new JPanel();
         swapPanel.add(new JLabel("Food Swap Screen"));

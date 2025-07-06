@@ -199,8 +199,8 @@ public class ChartsService {
         chart.addDataPoint("Fiber Target", targets.getFiber(), "target");
         chart.addDataPoint("Fiber Actual", actualNutrients.getFiber(), "actual");
         
-        chart.addDataPoint("Sugar Target", targets.getSugar(), "target");
-        chart.addDataPoint("Sugar Actual", actualNutrients.getSugar(), "actual");
+        chart.addDataPoint("Carbs Target", targets.getCarbs(), "target");
+        chart.addDataPoint("Carbs Actual", actualNutrients.getCarbs(), "actual");
         
         chart.setXAxisLabel("Nutrient");
         chart.setYAxisLabel("Grams");
@@ -239,9 +239,9 @@ public class ChartsService {
             recommendations.append("- Add more fiber-rich foods like vegetables and whole grains\n");
         }
         
-        // Sugar recommendations
-        if (dailyTotals.getSugar() > 50) {
-            recommendations.append("- Consider reducing sugar intake\n");
+        // Carbs recommendations
+        if (dailyTotals.getCarbs() > 300) {
+            recommendations.append("- Consider moderating carbohydrate intake\n");
         }
         
         return recommendations.toString();

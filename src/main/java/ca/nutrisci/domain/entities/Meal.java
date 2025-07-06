@@ -249,8 +249,7 @@ public class Meal {
         return profileId != null && 
                mealType != null && isValidMealType(mealType) &&
                date != null &&
-               ingredients.size() == quantities.size() &&
-               !ingredients.isEmpty();
+               ingredients.size() == quantities.size();
     }
     
     // Getters and Setters
