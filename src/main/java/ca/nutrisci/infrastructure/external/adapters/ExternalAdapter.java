@@ -120,7 +120,7 @@ public class ExternalAdapter implements INutritionGateway {
             System.out.println("CNF FOOD NAME.csv not found: " + foodNameFile);
             return;
         }
-        
+
         int foodCount = 0;
         try (BufferedReader reader = new BufferedReader(new FileReader(foodNameFile))) {
             String line;
@@ -136,16 +136,19 @@ public class ExternalAdapter implements INutritionGateway {
                 if (parts.length >= 5) {
                     String foodId = parts[0].trim();
                     String foodGroupId = parts[2].trim();
-                    String foodName = parts[4].trim().replaceAll("\"", "").toLowerCase();
+                    String rawFoodName = parts[4].trim().replaceAll("\"", "");
+                    
+                    // Clean up the food name by removing food group prefix
+                    String cleanFoodName = cleanFoodName(rawFoodName).toLowerCase();
                     
                     // Store mappings
-                    foodNameToIdMap.put(foodName, foodId);
-                    foodIdToNameMap.put(foodId, foodName);
+                    foodNameToIdMap.put(cleanFoodName, foodId);
+                    foodIdToNameMap.put(foodId, cleanFoodName);
                     
                     // Store food group mapping
                     try {
                         int groupId = Integer.parseInt(foodGroupId);
-                        foodToGroupMap.put(foodName, groupId);
+                        foodToGroupMap.put(cleanFoodName, groupId);
                     } catch (NumberFormatException e) {
                         // Skip invalid group IDs
                     }
@@ -156,6 +159,68 @@ public class ExternalAdapter implements INutritionGateway {
         }
         
         System.out.println("Loaded " + foodCount + " food names from CNF database");
+    }
+    
+    /**
+     * Clean up food name by removing food group prefix and extracting the main food name
+     */
+    private String cleanFoodName(String rawFoodName) {
+        if (rawFoodName == null || rawFoodName.trim().isEmpty()) {
+            return rawFoodName;
+        }
+        
+        // Split by commas to separate the food group from the actual food name
+        String[] parts = rawFoodName.split(",");
+        
+        if (parts.length == 1) {
+            // No commas, return as-is
+            return rawFoodName.trim();
+        }
+        
+        // Check if the first part is a food group category that should be removed
+        String firstPart = parts[0].trim().toLowerCase();
+        
+        // List of food group prefixes to remove
+        String[] foodGroupPrefixes = {
+            "babyfood", "baby food", "spices", "grains", "animal fat", "vegetable oil",
+            "salad dressing", "shortening", "fish oil", "poultry food products",
+            "chinese dish", "fast foods", "cereals", "baked products", "beverages",
+            "dairy", "egg", "fats and oils", "legumes", "nuts and seeds", "sweets",
+            "vegetables", "fruits", "meat", "poultry", "seafood"
+        };
+        
+        boolean shouldRemoveFirstPart = false;
+        for (String prefix : foodGroupPrefixes) {
+            if (firstPart.contains(prefix) || firstPart.startsWith(prefix)) {
+                shouldRemoveFirstPart = true;
+                break;
+            }
+        }
+        
+        if (shouldRemoveFirstPart && parts.length > 1) {
+            // Remove the first part and join the rest
+            StringBuilder result = new StringBuilder();
+            for (int i = 1; i < parts.length; i++) {
+                if (i > 1) result.append(", ");
+                result.append(parts[i].trim());
+            }
+            return result.toString();
+        } else {
+            // Keep the original name but reformat it nicely
+            // For names like "Cheese, blue" -> "blue cheese"
+            if (parts.length == 2) {
+                String category = parts[0].trim();
+                String type = parts[1].trim();
+                
+                // For simple category-type pairs, reverse the order
+                if (category.toLowerCase().matches("cheese|milk|bread|rice|potato|meat|fish|chicken|beef|turkey|pork")) {
+                    return type + " " + category.toLowerCase();
+                }
+            }
+            
+            // For more complex names, just remove redundant parts and clean up
+            return rawFoodName.trim();
+        }
     }
     
     /**
