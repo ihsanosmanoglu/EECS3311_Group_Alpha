@@ -1,6 +1,6 @@
 #FileLock
-#Sun Jul 06 20:37:35 EDT 2025
-hostName=localhost
-id=197e2511be72af8611c466392834e830fe22639df27
+#Sat Jul 12 01:31:20 EDT 2025
+hostName=mac
+id=197fd1dd68ffae0e3bd6a6684cd0361bbc0d092dc45
 method=file
-server=localhost\:51300
+server=192.168.2.96\:57970

@@ -18,6 +18,12 @@ import ca.nutrisci.infrastructure.external.adapters.INutritionGateway;
 import ca.nutrisci.infrastructure.external.adapters.ExternalAdapter;
 import ca.nutrisci.presentation.controllers.MealLogController;
 import ca.nutrisci.presentation.ui.meallog.MealLogPanel;
+import ca.nutrisci.presentation.controllers.SwapController;
+import ca.nutrisci.presentation.ui.SwapPanel;
+import ca.nutrisci.application.facades.ISwapFacade;
+import ca.nutrisci.application.facades.SwapEngine;
+import ca.nutrisci.domain.strategies.SwapStrategyFactory;
+import ca.nutrisci.infrastructure.data.repositories.SwapHistoryRepo;
 import javax.swing.*;
 import java.awt.*;
 
@@ -59,6 +65,7 @@ public class MainApplication {
     private IRepositoryFactory repoFactory;
     private IProfileFacade profileFacade;
     private IMealLogFacade mealLogFacade;
+    private ISwapFacade swapFacade;
     
     // Current application state
     private ProfileDTO currentProfile;
@@ -117,6 +124,12 @@ public class MainApplication {
         // Meal logging dependencies
         INutritionGateway nutritionGateway = ExternalAdapter.getInstance("Canada Nutrient File-20250622");
         mealLogFacade = new MealLogging(repoFactory, nutritionGateway);
+        
+        // Swap engine dependencies
+        SwapStrategyFactory strategyFactory = new SwapStrategyFactory(nutritionGateway);
+        SwapHistoryRepo swapHistoryRepo = repoFactory.getSwapHistoryRepository();
+        MealLogRepo mealLogRepo = repoFactory.getMealLogRepository();
+        swapFacade = new SwapEngine(strategyFactory, swapHistoryRepo, nutritionGateway, mealLogRepo);
     }
     
     /**
@@ -244,10 +257,25 @@ public class MainApplication {
         // Initialize the controller
         mealLogController.initialize();
         
-        // Placeholder panels for future features
-        JPanel swapPanel = createPlaceholderPanel("Food Swap Engine", 
-            "Smart food swapping recommendations will be available here.");
+        // Swap Engine Panel
+        SwapPanel swapPanel = new SwapPanel(swapFacade, currentProfile);
+        SwapController swapController = new SwapController(swapPanel);
         
+        // Register SwapPanel as a ProfileChangeListener (Observer pattern)
+        if (repoFactory instanceof JdbcRepoFactory) {
+            ProfileRepo profileRepo = repoFactory.getProfileRepository();
+            ProfileService profileService = new ProfileService(profileRepo);
+            profileService.addProfileChangeListener(swapPanel);
+        }
+        
+        // Set facades on the swap controller
+        swapController.setSwapFacade(swapFacade);
+        swapController.setProfileFacade(profileFacade);
+        
+        // Initialize the controller
+        swapController.initialize();
+        
+        // Placeholder panel for visualization
         JPanel vizPanel = createPlaceholderPanel("Data Visualization", 
             "Charts and graphs of your nutrition data will be displayed here.");
 
