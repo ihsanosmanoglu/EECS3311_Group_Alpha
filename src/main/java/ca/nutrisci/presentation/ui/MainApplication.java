@@ -268,9 +268,10 @@ public class MainApplication {
             profileService.addProfileChangeListener(swapPanel);
         }
         
-        // Set facades on the swap controller
+        // Set facades on the swap controller and panel
         swapController.setSwapFacade(swapFacade);
         swapController.setProfileFacade(profileFacade);
+        swapPanel.setMealLogFacade(mealLogFacade); // Inject mealLogFacade for meal history
         
         // Initialize the controller
         swapController.initialize();

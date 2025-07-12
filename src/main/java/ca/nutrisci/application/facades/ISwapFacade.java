@@ -1,6 +1,7 @@
 package ca.nutrisci.application.facades;
 
 import ca.nutrisci.application.dto.GoalNutrientDTO;
+import ca.nutrisci.application.dto.MealDTO;
 import ca.nutrisci.application.dto.SwapDTO;
 import ca.nutrisci.application.dto.SwapGoalDTO;
 import ca.nutrisci.application.dto.SwapResultDTO;
@@ -17,13 +18,13 @@ import java.util.ArrayList;
 public interface ISwapFacade {
 
     /**
-     * Selects a swap strategy based on the goal and suggests swaps.
+     * Selects a swap strategy based on the goal and suggests swaps for a specific meal.
      * Used by ScreenControllers.
-     * @param goal The swap goal.
-     * @param nutrient The target nutrient for the goal.
+     * @param goals The swap goals.
+     * @param selectedMeal The actual meal with real ingredients to generate swaps for.
      * @return A list of swap suggestions.
      */
-    List<SwapDTO> selectStrategyAndSuggest(ArrayList<SwapGoalDTO> goals, ArrayList<GoalNutrientDTO> nutrients);
+    List<SwapDTO> selectStrategyAndSuggest(ArrayList<SwapGoalDTO> goals, MealDTO selectedMeal);
 
     /**
      * Previews the impact of a potential swap on a meal.

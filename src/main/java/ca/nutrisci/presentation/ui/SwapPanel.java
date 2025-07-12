@@ -4,15 +4,20 @@ import ca.nutrisci.application.dto.ProfileDTO;
 import ca.nutrisci.application.dto.SwapGoalDTO;
 import ca.nutrisci.application.dto.GoalNutrientDTO;
 import ca.nutrisci.application.dto.SwapDTO;
+import ca.nutrisci.application.dto.MealDTO;
 import ca.nutrisci.application.facades.ISwapFacade;
+import ca.nutrisci.application.facades.IMealLogFacade;
 import ca.nutrisci.application.services.observers.ProfileChangeListener;
 
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * SwapPanel - Main panel for food swap functionality
@@ -40,6 +45,7 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     
     // Core dependencies (DD-1: Layered Architecture, DD-2: Domain Façades)
     private final ISwapFacade swapFacade;
+    private IMealLogFacade mealLogFacade; // For loading meal history
     
     // UI Components
     private JPanel goalSelectionPanel;
@@ -65,10 +71,20 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     private JPanel suggestionsListPanel;
     private JScrollPane suggestionsScrollPane;
     
+    // Meal selection components (similar to MealJournalPanel)
+    private JTextField selectedDateField;
+    private JButton todayButton;
+    private JList<String> mealSelectionList;
+    private DefaultListModel<String> mealListModel;
+    private JButton selectMealButton;
+    
     // Current state
     private ProfileDTO activeProfile;
     private boolean dualGoalsEnabled = false;
     private List<SwapDTO> currentSuggestions = new ArrayList<>();
+    private LocalDate currentMealDate;
+    private List<MealDTO> currentMeals = new ArrayList<>();
+    private MealDTO selectedMeal;
     
     // Constants
     private static final String[] NUTRIENTS = {"Calories", "Protein", "Carbohydrates", "Fat", "Fiber"};
@@ -85,6 +101,7 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     public SwapPanel(ISwapFacade swapFacade, ProfileDTO activeProfile) {
         this.swapFacade = swapFacade;
         this.activeProfile = activeProfile;
+        this.currentMealDate = LocalDate.now();
         
         // Template Method pattern - standardized initialization sequence
         initializeComponents();
@@ -332,56 +349,74 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     }
     
     /**
-     * Create the meal selection panel
+     * Create the meal selection panel (similar to MealJournalPanel)
      */
     private JPanel createMealSelectionPanel() {
         JPanel panel = new JPanel(new BorderLayout());
-        panel.setBorder(BorderFactory.createTitledBorder("Apply to Meal"));
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 2), 
+            "Select Meal for Swaps", 
+            0, 
+            0, 
+            new Font("Arial", Font.BOLD, 14), 
+            Color.BLACK
+        ));
+        panel.setBackground(Color.WHITE);
         panel.setPreferredSize(new Dimension(350, 400));
         
-        // Meal selection dropdown
-        JLabel selectLabel = new JLabel("Select a meal to apply swaps to:");
-        selectLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        selectLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 5, 10));
+        // Date selector panel at the top
+        JPanel datePanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        datePanel.setBorder(BorderFactory.createEmptyBorder(5, 10, 5, 10));
+        datePanel.setBackground(Color.WHITE);
         
-        JComboBox<String> mealComboBox = new JComboBox<>();
-        mealComboBox.addItem("Select a meal...");
-        mealComboBox.addItem("Today's Breakfast");
-        mealComboBox.addItem("Today's Lunch");
-        mealComboBox.addItem("Today's Dinner");
-        mealComboBox.addItem("Recent meals...");
-        mealComboBox.setFont(new Font("Arial", Font.PLAIN, 12));
-        mealComboBox.setPreferredSize(new Dimension(250, 30));
+        JLabel dateLabel = new JLabel("View Date:");
+        dateLabel.setFont(new Font("Arial", Font.BOLD, 12));
+        datePanel.add(dateLabel);
         
-        // Instructions
-        JTextArea instructionsArea = new JTextArea(
-            "Phase 2 Instructions:\n\n" +
-            "1. Select nutrient target and action\n" +
-            "2. Choose intensity level:\n" +
-            "   • High: 30% impact\n" +
-            "   • Normal: 20% impact\n" +
-            "   • Precise: Custom %\n" +
-            "3. Optional: Add second goal\n" +
-            "4. Click 'Get Swap Suggestions'\n" +
-            "5. Review up to 4 suggestions\n\n" +
-            "Each suggestion shows:\n" +
-            "• Food replacement\n" +
-            "• Goal satisfaction metrics\n" +
-            "• Nutritional impact"
-        );
-        instructionsArea.setEditable(false);
-        instructionsArea.setFont(new Font("Arial", Font.PLAIN, 11));
-        instructionsArea.setBackground(getBackground());
-        instructionsArea.setBorder(BorderFactory.createEmptyBorder(15, 10, 10, 10));
-        instructionsArea.setLineWrap(true);
-        instructionsArea.setWrapStyleWord(true);
+        selectedDateField = new JTextField(LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE));
+        selectedDateField.setPreferredSize(new Dimension(120, 25));
+        selectedDateField.setFont(new Font("Arial", Font.PLAIN, 12));
+        datePanel.add(selectedDateField);
         
-        JPanel topPanel = new JPanel(new BorderLayout());
-        topPanel.add(selectLabel, BorderLayout.NORTH);
-        topPanel.add(mealComboBox, BorderLayout.CENTER);
+        todayButton = new JButton("Today");
+        todayButton.setPreferredSize(new Dimension(80, 25));
+        todayButton.setFont(new Font("Arial", Font.BOLD, 11));
+        todayButton.setBackground(new Color(33, 150, 243));
+        todayButton.setForeground(Color.WHITE);
+        todayButton.setFocusPainted(false);
+        todayButton.setBorderPainted(false);
+        todayButton.setOpaque(true);
+        datePanel.add(todayButton);
         
-        panel.add(topPanel, BorderLayout.NORTH);
-        panel.add(instructionsArea, BorderLayout.CENTER);
+        panel.add(datePanel, BorderLayout.NORTH);
+        
+        // Meal list in the center
+        mealListModel = new DefaultListModel<>();
+        mealSelectionList = new JList<>(mealListModel);
+        mealSelectionList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        mealSelectionList.setCellRenderer(new MealSelectionCellRenderer());
+        mealSelectionList.setBackground(Color.WHITE);
+        
+        JScrollPane scrollPane = new JScrollPane(mealSelectionList);
+        scrollPane.setBorder(BorderFactory.createEmptyBorder(5, 10, 10, 10));
+        panel.add(scrollPane, BorderLayout.CENTER);
+        
+        // Select meal button at the bottom
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        buttonPanel.setBackground(Color.WHITE);
+        
+        selectMealButton = new JButton("Select This Meal");
+        selectMealButton.setFont(new Font("Arial", Font.BOLD, 12));
+        selectMealButton.setBackground(new Color(76, 175, 80));
+        selectMealButton.setForeground(Color.WHITE);
+        selectMealButton.setFocusPainted(false);
+        selectMealButton.setBorderPainted(false);
+        selectMealButton.setOpaque(true);
+        selectMealButton.setEnabled(false);
+        selectMealButton.setPreferredSize(new Dimension(150, 35));
+        
+        buttonPanel.add(selectMealButton);
+        panel.add(buttonPanel, BorderLayout.SOUTH);
         
         return panel;
     }
@@ -443,7 +478,171 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
         // Get suggestions button
         getSuggestionsButton.addActionListener(e -> generateSuggestions());
         
+        // Meal selection event handlers
+        setupMealSelectionEventHandlers();
+        
         System.out.println("✅ SwapPanel event handlers configured");
+    }
+    
+    /**
+     * Setup event handlers for meal selection components
+     */
+    private void setupMealSelectionEventHandlers() {
+        // Date field listener
+        selectedDateField.addActionListener(e -> handleMealDateChange());
+        
+        // Today button listener
+        todayButton.addActionListener(e -> {
+            selectedDateField.setText(LocalDate.now().format(DateTimeFormatter.ISO_LOCAL_DATE));
+            handleMealDateChange();
+        });
+        
+        // Meal list selection listener
+        mealSelectionList.addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                updateMealSelectionButtonState();
+            }
+        });
+        
+        // Select meal button listener
+        selectMealButton.addActionListener(e -> handleMealSelection());
+        
+        // Double-click to select meal
+        mealSelectionList.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent evt) {
+                if (evt.getClickCount() == 2) {
+                    handleMealSelection();
+                }
+            }
+        });
+    }
+    
+    /**
+     * Handle date change for meal selection
+     */
+    private void handleMealDateChange() {
+        try {
+            String selectedDateStr = selectedDateField.getText().trim();
+            LocalDate newDate = LocalDate.parse(selectedDateStr);
+            
+            if (!newDate.equals(currentMealDate)) {
+                currentMealDate = newDate;
+                refreshMealSelection();
+            }
+        } catch (Exception e) {
+            System.err.println("Error parsing selected date: " + e.getMessage());
+            // Reset to current date if invalid
+            selectedDateField.setText(currentMealDate.format(DateTimeFormatter.ISO_LOCAL_DATE));
+        }
+    }
+    
+    /**
+     * Refresh the meal selection list for the current date
+     */
+    private void refreshMealSelection() {
+        try {
+            if (activeProfile != null && currentMealDate != null && mealLogFacade != null) {
+                // Get meals for the current date
+                List<MealDTO> mealsForDate = mealLogFacade.getMealsForDate(currentMealDate)
+                    .stream()
+                    .filter(meal -> meal.getProfileId().equals(activeProfile.getId()))
+                    .sorted(this::compareMealsByType)
+                    .collect(Collectors.toList());
+                
+                currentMeals = mealsForDate;
+                updateMealSelectionDisplay();
+            } else {
+                currentMeals = new ArrayList<>();
+                updateMealSelectionDisplay();
+            }
+        } catch (Exception e) {
+            System.err.println("Error refreshing meal selection: " + e.getMessage());
+            e.printStackTrace();
+            
+            // Show error state
+            mealListModel.clear();
+            mealListModel.addElement("Error loading meals");
+        }
+    }
+    
+    /**
+     * Update the meal selection display
+     */
+    private void updateMealSelectionDisplay() {
+        mealListModel.clear();
+        
+        if (currentMeals.isEmpty()) {
+            String dateStr = currentMealDate.format(DateTimeFormatter.ofPattern("MMM dd, yyyy"));
+            mealListModel.addElement("No meals logged for " + dateStr);
+        } else {
+            for (MealDTO meal : currentMeals) {
+                String displayText = formatMealDisplayText(meal);
+                mealListModel.addElement(displayText);
+            }
+        }
+        
+        // Reset selection and button states
+        mealSelectionList.clearSelection();
+        selectedMeal = null;
+        updateMealSelectionButtonState();
+    }
+    
+    /**
+     * Format meal display text (similar to MealJournalPanel)
+     */
+    private String formatMealDisplayText(MealDTO meal) {
+        double calories = meal.getNutrients() != null ? meal.getNutrients().getCalories() : 0.0;
+        return String.format("%s (%.0f cal)", 
+            meal.getMealType().toUpperCase(),
+            calories);
+    }
+    
+    /**
+     * Compare meals by type for sorting (breakfast, lunch, dinner, snack)
+     */
+    private int compareMealsByType(MealDTO m1, MealDTO m2) {
+        String[] mealOrder = {"breakfast", "lunch", "dinner", "snack"};
+        int index1 = java.util.Arrays.asList(mealOrder).indexOf(m1.getMealType().toLowerCase());
+        int index2 = java.util.Arrays.asList(mealOrder).indexOf(m2.getMealType().toLowerCase());
+        return Integer.compare(index1, index2);
+    }
+    
+    /**
+     * Handle meal selection
+     */
+    private void handleMealSelection() {
+        int selectedIndex = mealSelectionList.getSelectedIndex();
+        if (selectedIndex >= 0 && selectedIndex < currentMeals.size()) {
+            selectedMeal = currentMeals.get(selectedIndex);
+            System.out.println("✅ Selected meal: " + selectedMeal.getMealType() + " for swaps");
+            
+            // Update UI to show selected meal
+            selectMealButton.setText("✓ " + selectedMeal.getMealType().toUpperCase() + " Selected");
+            selectMealButton.setBackground(new Color(46, 125, 50));
+        }
+    }
+    
+    /**
+     * Update meal selection button state
+     */
+    private void updateMealSelectionButtonState() {
+        int selectedIndex = mealSelectionList.getSelectedIndex();
+        boolean hasValidSelection = selectedIndex >= 0 && 
+                                   selectedIndex < currentMeals.size() && 
+                                   !currentMeals.isEmpty();
+        
+        if (hasValidSelection) {
+            selectMealButton.setEnabled(true);
+            selectMealButton.setText("Select This Meal");
+            selectMealButton.setBackground(new Color(76, 175, 80));
+        } else {
+            selectMealButton.setEnabled(false);
+            if (selectedMeal != null) {
+                selectMealButton.setText("✓ " + selectedMeal.getMealType().toUpperCase() + " Selected");
+                selectMealButton.setBackground(new Color(46, 125, 50));
+            }
+        }
     }
     
     /**
@@ -475,13 +674,16 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
                 System.out.println("🎯 Goal 2: " + goal2.getGoalTarget() + " " + goal2.getAction() + " " + goal2.getTargetValue() + "%");
             }
             
-            // Create mock nutrients (in real implementation, this would come from meal data)
-            ArrayList<GoalNutrientDTO> nutrients = createMockNutrients();
-            System.out.println("🎯 Mock nutrients created: " + nutrients.size() + " nutrients");
+            // Validate meal selection
+            if (selectedMeal == null) {
+                JOptionPane.showMessageDialog(this, "Please select a meal first", 
+                    "No Meal Selected", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
             
-            // Generate suggestions using SwapEngine
-            System.out.println("🎯 Calling SwapEngine with " + goals.size() + " goals...");
-            List<SwapDTO> suggestions = swapFacade.selectStrategyAndSuggest(goals, nutrients);
+            // Generate suggestions using SwapEngine with the actual selected meal
+            System.out.println("🎯 Calling SwapEngine with " + goals.size() + " goals for meal: " + selectedMeal.getMealType());
+            List<SwapDTO> suggestions = swapFacade.selectStrategyAndSuggest(goals, selectedMeal);
             System.out.println("🎯 SwapEngine returned " + suggestions.size() + " suggestions");
             
             // Display suggestions (limit to 4)
@@ -538,21 +740,7 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
         return goal;
     }
     
-    /**
-     * Create mock nutrients for testing (in real implementation, this would come from selected meal)
-     */
-    private ArrayList<GoalNutrientDTO> createMockNutrients() {
-        ArrayList<GoalNutrientDTO> nutrients = new ArrayList<>();
-        
-        // Mock current meal nutrition
-        nutrients.add(new GoalNutrientDTO("calories", 450.0, "kcal"));
-        nutrients.add(new GoalNutrientDTO("protein", 35.0, "g"));
-        nutrients.add(new GoalNutrientDTO("carbohydrates", 45.0, "g"));
-        nutrients.add(new GoalNutrientDTO("fat", 12.0, "g"));
-        nutrients.add(new GoalNutrientDTO("fiber", 8.0, "g"));
-        
-        return nutrients;
-    }
+
     
     /**
      * Display suggestions in the middle panel
@@ -760,5 +948,40 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     
     public boolean isDualGoalsEnabled() {
         return dualGoalsEnabled;
+    }
+    
+    /**
+     * Set the meal log facade for loading meal history
+     */
+    public void setMealLogFacade(IMealLogFacade mealLogFacade) {
+        this.mealLogFacade = mealLogFacade;
+        // Refresh meal selection when facade is available
+        if (mealLogFacade != null) {
+            refreshMealSelection();
+        }
+    }
+    
+    /**
+     * Custom cell renderer for meal selection list
+     */
+    private static class MealSelectionCellRenderer extends DefaultListCellRenderer {
+        @Override
+        public Component getListCellRendererComponent(JList<?> list, Object value, int index,
+                                                      boolean isSelected, boolean cellHasFocus) {
+            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+            
+            if (value instanceof String) {
+                String mealText = (String) value;
+                // Style based on meal content
+                if (mealText.contains("cal")) {
+                    setFont(new Font("Arial", Font.PLAIN, 12));
+                } else if (mealText.contains("No meals") || mealText.contains("Error")) {
+                    setFont(new Font("Arial", Font.ITALIC, 12));
+                    setForeground(isSelected ? Color.WHITE : Color.GRAY);
+                }
+            }
+            
+            return this;
+        }
     }
 } 

@@ -31,18 +31,21 @@ public class SwapEngine implements ISwapFacade {
     }
 
     @Override
-    public List<SwapDTO> selectStrategyAndSuggest(ArrayList<SwapGoalDTO> goals, ArrayList<GoalNutrientDTO> nutrients) {
+    public List<SwapDTO> selectStrategyAndSuggest(ArrayList<SwapGoalDTO> goals, MealDTO selectedMeal) {
         if (goals == null || goals.isEmpty()) {
             System.out.println("⚠️ No goals provided for swap suggestions");
             return new ArrayList<>();
         }
 
+        if (selectedMeal == null) {
+            System.out.println("⚠️ No meal provided for swap suggestions");
+            return new ArrayList<>();
+        }
+
         ArrayList<SwapDTO> allSwaps = new ArrayList<>();
         
-        // Create a mock meal from current nutrients for strategy processing
-        MealDTO currentMeal = createMockMealFromNutrients(nutrients);
-        
-        System.out.println("🎯 Processing " + goals.size() + " nutrition goals...");
+        System.out.println("🎯 Processing " + goals.size() + " nutrition goals for meal: " + selectedMeal.getMealType());
+        System.out.println("🍽️ Meal ingredients: " + selectedMeal.getIngredients());
         
         for (SwapGoalDTO goal : goals) {
             try {
@@ -52,8 +55,8 @@ public class SwapEngine implements ISwapFacade {
                 SwapStrategy strategy = strategyFactory.getStrategy(goal.getGoalTarget(), goal.getAction());
                 
                 if (strategy != null) {
-                    // Generate swaps using the strategy
-                    List<SwapDTO> goalSwaps = strategy.generateSwaps(currentMeal, goal);
+                    // Generate swaps using the strategy with the actual meal
+                    List<SwapDTO> goalSwaps = strategy.generateSwaps(selectedMeal, goal);
                     
                     // Filter and limit swaps to avoid overwhelming the user
                     List<SwapDTO> filteredSwaps = filterAndLimitSwaps(goalSwaps, 5);
@@ -162,73 +165,7 @@ public class SwapEngine implements ISwapFacade {
     
     // Private helper methods
     
-    private MealDTO createMockMealFromNutrients(ArrayList<GoalNutrientDTO> nutrients) {
-        if (nutrients == null || nutrients.isEmpty()) {
-            // Create a basic mock meal for strategy processing
-            return createBasicMockMeal();
-        }
-        
-        // Create a mock meal representing current nutritional state
-        List<String> ingredients = new ArrayList<>();
-        List<Double> quantities = new ArrayList<>();
-        
-        // Extract nutritional values
-        double calories = 0, protein = 0, carbs = 0, fat = 0, fiber = 0;
-        
-        for (GoalNutrientDTO nutrient : nutrients) {
-            switch (nutrient.getNutrientName().toLowerCase()) {
-                case "calories":
-                    calories = nutrient.getAmount();
-                    break;
-                case "protein":
-                    protein = nutrient.getAmount();
-                    break;
-                case "carbohydrates":
-                case "carbs":
-                    carbs = nutrient.getAmount();
-                    break;
-                case "fat":
-                    fat = nutrient.getAmount();
-                    break;
-                case "fiber":
-                    fiber = nutrient.getAmount();
-                    break;
-            }
-        }
-        
-        // Create mock ingredients based on nutrient profile
-        ingredients.add("mixed meal");
-        quantities.add(1.0);
-        
-        NutrientInfo mockNutrients = new NutrientInfo(calories, protein, carbs, fat, fiber);
-        
-        return new MealDTO(
-            UUID.randomUUID(), 
-            UUID.randomUUID(), 
-            LocalDate.now(), 
-            "current", 
-            ingredients, 
-            quantities, 
-            mockNutrients
-        );
-    }
-    
-    private MealDTO createBasicMockMeal() {
-        // Create a basic meal for testing strategies
-        List<String> ingredients = Arrays.asList("chicken breast", "rice", "broccoli");
-        List<Double> quantities = Arrays.asList(150.0, 100.0, 80.0);
-        NutrientInfo nutrients = new NutrientInfo(450, 35, 45, 8, 5);
-        
-        return new MealDTO(
-            UUID.randomUUID(), 
-            UUID.randomUUID(), 
-            LocalDate.now(), 
-            "lunch", 
-            ingredients, 
-            quantities, 
-            nutrients
-        );
-    }
+
     
     private List<SwapDTO> filterAndLimitSwaps(List<SwapDTO> swaps, int maxSwaps) {
         if (swaps == null || swaps.isEmpty()) {
