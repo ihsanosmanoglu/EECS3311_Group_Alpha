@@ -1,11 +1,18 @@
 package ca.nutrisci.presentation.ui;
 
 import ca.nutrisci.application.dto.ProfileDTO;
+import ca.nutrisci.application.dto.SwapGoalDTO;
+import ca.nutrisci.application.dto.GoalNutrientDTO;
+import ca.nutrisci.application.dto.SwapDTO;
 import ca.nutrisci.application.facades.ISwapFacade;
 import ca.nutrisci.application.services.observers.ProfileChangeListener;
 
 import javax.swing.*;
 import java.awt.*;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * SwapPanel - Main panel for food swap functionality
@@ -39,8 +46,35 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     private JPanel suggestionsPanel;
     private JPanel mealSelectionPanel;
     
+    // Goal selection components
+    private JPanel goal1Panel;
+    private JPanel goal2Panel;
+    private JComboBox<String> goal1TargetCombo;
+    private JComboBox<String> goal1ActionCombo;
+    private JComboBox<String> goal1IntensityCombo;
+    private JComboBox<String> goal1PercentageCombo;
+    private JComboBox<String> goal2TargetCombo;
+    private JComboBox<String> goal2ActionCombo;
+    private JComboBox<String> goal2IntensityCombo;
+    private JComboBox<String> goal2PercentageCombo;
+    private JButton addGoalButton;
+    private JButton removeGoalButton;
+    private JButton getSuggestionsButton;
+    
+    // Suggestions display components
+    private JPanel suggestionsListPanel;
+    private JScrollPane suggestionsScrollPane;
+    
     // Current state
     private ProfileDTO activeProfile;
+    private boolean dualGoalsEnabled = false;
+    private List<SwapDTO> currentSuggestions = new ArrayList<>();
+    
+    // Constants
+    private static final String[] NUTRIENTS = {"Calories", "Protein", "Carbohydrates", "Fat", "Fiber"};
+    private static final String[] ACTIONS = {"Decrease", "Increase"};
+    private static final String[] INTENSITIES = {"High", "Normal", "Precise"};
+    private static final String[] PERCENTAGES = {"5%", "10%", "15%", "20%", "25%", "30%", "35%", "40%", "45%", "50%"};
     
     /**
      * Constructor - Initializes the swap panel
@@ -55,6 +89,7 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
         // Template Method pattern - standardized initialization sequence
         initializeComponents();
         layoutComponents();
+        setupEventHandlers();
         
         System.out.println("✅ SwapPanel initialized for profile: " + 
                          (activeProfile != null ? activeProfile.getName() : "none"));
@@ -64,10 +99,10 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
      * Initialize all UI components
      */
     private void initializeComponents() {
-        // Goal Selection Panel - where users choose their nutrition goals
+        // Goal Selection Panel - advanced dropdown interface
         goalSelectionPanel = createGoalSelectionPanel();
         
-        // Suggestions Panel - where swap suggestions are displayed
+        // Suggestions Panel - display up to 4 swap suggestions
         suggestionsPanel = createSuggestionsPanel();
         
         // Meal Selection Panel - where users select which meal to apply swaps to
@@ -77,50 +112,191 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     }
     
     /**
-     * Create the goal selection panel
+     * Create the advanced goal selection panel with dropdown menus
      */
     private JPanel createGoalSelectionPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Nutrition Goals"));
-        panel.setPreferredSize(new Dimension(350, 300));
+        panel.setPreferredSize(new Dimension(350, 400));
         
         // Title
         JLabel titleLabel = new JLabel("Select Your Nutrition Goals", SwingConstants.CENTER);
         titleLabel.setFont(new Font("Arial", Font.BOLD, 16));
         titleLabel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
-        // Goal checkboxes panel
-        JPanel goalsPanel = new JPanel(new GridLayout(6, 2, 10, 5));
-        goalsPanel.setBorder(BorderFactory.createEmptyBorder(10, 20, 10, 20));
+        // Goals container
+        JPanel goalsContainer = new JPanel();
+        goalsContainer.setLayout(new BoxLayout(goalsContainer, BoxLayout.Y_AXIS));
+        goalsContainer.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         
-        // Create checkboxes for each nutrition goal
-        String[] goals = {"Calories", "Protein", "Carbohydrates", "Fat", "Fiber"};
-        String[] actions = {"Decrease", "Increase"};
+        // Goal 1 (always visible)
+        goal1Panel = createGoalPanel("Goal 1", 1);
+        goalsContainer.add(goal1Panel);
         
-        for (String goal : goals) {
-            for (String action : actions) {
-                JCheckBox checkbox = new JCheckBox(action + " " + goal);
-                checkbox.setFont(new Font("Arial", Font.PLAIN, 12));
-                goalsPanel.add(checkbox);
-            }
-        }
+        // Goal 2 (initially hidden)
+        goal2Panel = createGoalPanel("Goal 2", 2);
+        goal2Panel.setVisible(false);
+        goalsContainer.add(goal2Panel);
+        
+        // Add/Remove goal buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        addGoalButton = new JButton("Add Second Goal");
+        addGoalButton.setFont(new Font("Arial", Font.BOLD, 13));
+        addGoalButton.setBackground(new Color(33, 150, 243));
+        addGoalButton.setForeground(Color.WHITE);
+        addGoalButton.setFocusPainted(false);
+        addGoalButton.setBorderPainted(false);
+        addGoalButton.setOpaque(true);
+        
+        removeGoalButton = new JButton("Remove Second Goal");
+        removeGoalButton.setFont(new Font("Arial", Font.BOLD, 13));
+        removeGoalButton.setBackground(new Color(244, 67, 54));
+        removeGoalButton.setForeground(Color.WHITE);
+        removeGoalButton.setFocusPainted(false);
+        removeGoalButton.setBorderPainted(false);
+        removeGoalButton.setOpaque(true);
+        removeGoalButton.setVisible(false);
+        
+        buttonPanel.add(addGoalButton);
+        buttonPanel.add(removeGoalButton);
         
         // Get Suggestions button
-        JButton getSuggestionsBtn = new JButton("Get Swap Suggestions");
-        getSuggestionsBtn.setFont(new Font("Arial", Font.BOLD, 14));
-        getSuggestionsBtn.setBackground(new Color(76, 175, 80));
-        getSuggestionsBtn.setForeground(Color.WHITE);
-        getSuggestionsBtn.setFocusPainted(false);
-        getSuggestionsBtn.setPreferredSize(new Dimension(200, 40));
-        getSuggestionsBtn.addActionListener(e -> getSuggestions());
+        getSuggestionsButton = new JButton("Get Swap Suggestions");
+        getSuggestionsButton.setFont(new Font("Arial", Font.BOLD, 14));
+        getSuggestionsButton.setBackground(new Color(76, 175, 80));
+        getSuggestionsButton.setForeground(Color.WHITE);
+        getSuggestionsButton.setFocusPainted(false);
+        getSuggestionsButton.setBorderPainted(false);
+        getSuggestionsButton.setOpaque(true);
+        getSuggestionsButton.setPreferredSize(new Dimension(200, 40));
         
-        JPanel buttonPanel = new JPanel(new FlowLayout());
-        buttonPanel.add(getSuggestionsBtn);
+        JPanel suggestionsButtonPanel = new JPanel(new FlowLayout());
+        suggestionsButtonPanel.add(getSuggestionsButton);
         
         panel.add(titleLabel, BorderLayout.NORTH);
-        panel.add(goalsPanel, BorderLayout.CENTER);
-        panel.add(buttonPanel, BorderLayout.SOUTH);
+        panel.add(goalsContainer, BorderLayout.CENTER);
         
+        JPanel bottomPanel = new JPanel(new BorderLayout());
+        bottomPanel.add(buttonPanel, BorderLayout.NORTH);
+        bottomPanel.add(suggestionsButtonPanel, BorderLayout.CENTER);
+        panel.add(bottomPanel, BorderLayout.SOUTH);
+        
+        return panel;
+    }
+    
+    /**
+     * Create a single goal panel with dropdown menus
+     */
+    private JPanel createGoalPanel(String title, int goalNumber) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(Color.GRAY, 2), 
+            title, 
+            0, 
+            0, 
+            new Font("Arial", Font.BOLD, 14), 
+            Color.BLACK
+        ));
+        panel.setBackground(Color.WHITE);
+        panel.setPreferredSize(new Dimension(300, 140));
+        
+        JPanel formPanel = new JPanel(new GridBagLayout());
+        formPanel.setBackground(Color.WHITE); // Ensure white background for better contrast
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(8, 8, 8, 8); // Increase spacing for better readability
+        gbc.anchor = GridBagConstraints.WEST;
+        
+        // Nutrient selection
+        gbc.gridx = 0; gbc.gridy = 0;
+        JLabel nutrientLabel = new JLabel("Nutrient:");
+        nutrientLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        nutrientLabel.setForeground(Color.BLACK);
+        formPanel.add(nutrientLabel, gbc);
+        gbc.gridx = 1;
+        JComboBox<String> targetCombo = new JComboBox<>(NUTRIENTS);
+        targetCombo.setPreferredSize(new Dimension(120, 25));
+        formPanel.add(targetCombo, gbc);
+        
+        // Action selection
+        gbc.gridx = 0; gbc.gridy = 1;
+        JLabel actionLabel = new JLabel("Action:");
+        actionLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        actionLabel.setForeground(Color.BLACK);
+        formPanel.add(actionLabel, gbc);
+        gbc.gridx = 1;
+        JComboBox<String> actionCombo = new JComboBox<>(ACTIONS);
+        actionCombo.setPreferredSize(new Dimension(120, 25));
+        formPanel.add(actionCombo, gbc);
+        
+        // Intensity selection
+        gbc.gridx = 0; gbc.gridy = 2;
+        JLabel intensityLabel = new JLabel("Intensity:");
+        intensityLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        intensityLabel.setForeground(Color.BLACK);
+        formPanel.add(intensityLabel, gbc);
+        gbc.gridx = 1;
+        JComboBox<String> intensityCombo = new JComboBox<>(INTENSITIES);
+        intensityCombo.setPreferredSize(new Dimension(120, 25));
+        intensityCombo.setSelectedItem("Normal");
+        formPanel.add(intensityCombo, gbc);
+        
+        // Percentage selection (always visible, enabled only for Precise)
+        gbc.gridx = 0; gbc.gridy = 3;
+        JLabel percentageLabel = new JLabel("Percentage:");
+        percentageLabel.setFont(new Font("Arial", Font.BOLD, 14)); // Make label more visible
+        percentageLabel.setForeground(Color.GRAY); // Start with gray text
+        formPanel.add(percentageLabel, gbc);
+        gbc.gridx = 1;
+        JComboBox<String> percentageCombo = new JComboBox<>(PERCENTAGES);
+        percentageCombo.setPreferredSize(new Dimension(120, 25));
+        percentageCombo.setSelectedItem("20%"); // Default for Normal
+        percentageCombo.setEnabled(false); // Disabled by default (Normal intensity)
+        percentageCombo.setBackground(new Color(240, 240, 240)); // Start with gray background
+        formPanel.add(percentageCombo, gbc);
+        
+        // Store references based on goal number
+        if (goalNumber == 1) {
+            goal1TargetCombo = targetCombo;
+            goal1ActionCombo = actionCombo;
+            goal1IntensityCombo = intensityCombo;
+            goal1PercentageCombo = percentageCombo;
+        } else {
+            goal2TargetCombo = targetCombo;
+            goal2ActionCombo = actionCombo;
+            goal2IntensityCombo = intensityCombo;
+            goal2PercentageCombo = percentageCombo;
+        }
+        
+        // Setup intensity change listener
+        intensityCombo.addActionListener(e -> {
+            String selectedIntensity = (String) intensityCombo.getSelectedItem();
+            boolean isPrecise = "Precise".equals(selectedIntensity);
+            
+            // Always show percentage, but enable/disable based on intensity
+            percentageCombo.setEnabled(isPrecise);
+            
+            // Auto-set percentage for High/Normal, keep current for Precise
+            if ("High".equals(selectedIntensity)) {
+                percentageCombo.setSelectedItem("30%");
+            } else if ("Normal".equals(selectedIntensity)) {
+                percentageCombo.setSelectedItem("20%");
+            }
+            // For Precise, keep whatever is currently selected
+            
+            // Visual feedback - change background color when disabled
+            if (isPrecise) {
+                percentageCombo.setBackground(Color.WHITE);
+                percentageLabel.setForeground(Color.BLACK);
+            } else {
+                percentageCombo.setBackground(new Color(240, 240, 240)); // Light gray
+                percentageLabel.setForeground(Color.GRAY);
+            }
+            
+            panel.revalidate();
+            panel.repaint();
+        });
+        
+        panel.add(formPanel, BorderLayout.CENTER);
         return panel;
     }
     
@@ -130,24 +306,27 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     private JPanel createSuggestionsPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Swap Suggestions"));
-        panel.setPreferredSize(new Dimension(400, 300));
+        panel.setPreferredSize(new Dimension(400, 400));
         
-        // Placeholder content
-        JLabel placeholderLabel = new JLabel(
-            "<html><div style='text-align: center;'>" +
-            "Select your nutrition goals and click<br/>" +
-            "'Get Swap Suggestions' to see recommendations<br/><br/>" +
-            "Suggestions will appear here with:<br/>" +
-            "• Food replacement options<br/>" +
-            "• Nutritional impact<br/>" +
-            "• Apply buttons" +
-            "</div></html>", 
-            SwingConstants.CENTER
-        );
-        placeholderLabel.setFont(new Font("Arial", Font.PLAIN, 12));
-        placeholderLabel.setForeground(Color.GRAY);
+        // Title
+        JLabel titleLabel = new JLabel("Suggestions (Max 4)", SwingConstants.CENTER);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 14));
+        titleLabel.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         
-        panel.add(placeholderLabel, BorderLayout.CENTER);
+        // Suggestions list panel
+        suggestionsListPanel = new JPanel();
+        suggestionsListPanel.setLayout(new BoxLayout(suggestionsListPanel, BoxLayout.Y_AXIS));
+        
+        // Scroll pane for suggestions
+        suggestionsScrollPane = new JScrollPane(suggestionsListPanel);
+        suggestionsScrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
+        suggestionsScrollPane.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        
+        // Initial placeholder
+        showPlaceholderMessage();
+        
+        panel.add(titleLabel, BorderLayout.NORTH);
+        panel.add(suggestionsScrollPane, BorderLayout.CENTER);
         
         return panel;
     }
@@ -158,7 +337,7 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     private JPanel createMealSelectionPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setBorder(BorderFactory.createTitledBorder("Apply to Meal"));
-        panel.setPreferredSize(new Dimension(350, 300));
+        panel.setPreferredSize(new Dimension(350, 400));
         
         // Meal selection dropdown
         JLabel selectLabel = new JLabel("Select a meal to apply swaps to:");
@@ -176,14 +355,19 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
         
         // Instructions
         JTextArea instructionsArea = new JTextArea(
-            "Instructions:\n\n" +
-            "1. Select your nutrition goals above\n" +
-            "2. Click 'Get Swap Suggestions'\n" +
-            "3. Choose a meal to modify\n" +
-            "4. Apply suggested swaps\n\n" +
-            "The system will analyze your current meals\n" +
-            "and suggest healthier alternatives that\n" +
-            "meet your nutrition goals."
+            "Phase 2 Instructions:\n\n" +
+            "1. Select nutrient target and action\n" +
+            "2. Choose intensity level:\n" +
+            "   • High: 30% impact\n" +
+            "   • Normal: 20% impact\n" +
+            "   • Precise: Custom %\n" +
+            "3. Optional: Add second goal\n" +
+            "4. Click 'Get Swap Suggestions'\n" +
+            "5. Review up to 4 suggestions\n\n" +
+            "Each suggestion shows:\n" +
+            "• Food replacement\n" +
+            "• Goal satisfaction metrics\n" +
+            "• Nutritional impact"
         );
         instructionsArea.setEditable(false);
         instructionsArea.setFont(new Font("Arial", Font.PLAIN, 11));
@@ -231,21 +415,291 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     }
     
     /**
-     * Handle getting swap suggestions (placeholder for now)
+     * Setup event handlers for all interactive components
      */
-    private void getSuggestions() {
-        // TODO: Phase 2 - Implement actual suggestion logic
-        JOptionPane.showMessageDialog(this, 
-            "Swap suggestion feature coming in Phase 2!\n\n" +
-            "This will:\n" +
-            "• Analyze your selected goals\n" +
-            "• Generate smart food swaps\n" +
-            "• Show nutritional impact\n" +
-            "• Allow you to apply changes", 
-            "Feature Preview", 
-            JOptionPane.INFORMATION_MESSAGE);
+    private void setupEventHandlers() {
+        // Add goal button
+        addGoalButton.addActionListener(e -> {
+            dualGoalsEnabled = true;
+            goal2Panel.setVisible(true);
+            addGoalButton.setVisible(false);
+            removeGoalButton.setVisible(true);
+            goalSelectionPanel.revalidate();
+            goalSelectionPanel.repaint();
+            System.out.println("✅ Second goal enabled");
+        });
         
-        System.out.println("🎯 Swap suggestions requested - Phase 2 implementation pending");
+        // Remove goal button
+        removeGoalButton.addActionListener(e -> {
+            dualGoalsEnabled = false;
+            goal2Panel.setVisible(false);
+            addGoalButton.setVisible(true);
+            removeGoalButton.setVisible(false);
+            goalSelectionPanel.revalidate();
+            goalSelectionPanel.repaint();
+            System.out.println("✅ Second goal disabled");
+        });
+        
+        // Get suggestions button
+        getSuggestionsButton.addActionListener(e -> generateSuggestions());
+        
+        System.out.println("✅ SwapPanel event handlers configured");
+    }
+    
+    /**
+     * Generate swap suggestions based on selected goals
+     */
+    private void generateSuggestions() {
+        System.out.println("🎯 generateSuggestions() called");
+        
+        try {
+            // Validate goal selection
+            if (goal1TargetCombo.getSelectedItem() == null) {
+                JOptionPane.showMessageDialog(this, "Please select a nutrient target for Goal 1", 
+                    "Invalid Selection", JOptionPane.WARNING_MESSAGE);
+                return;
+            }
+            
+            // Build goals list
+            ArrayList<SwapGoalDTO> goals = new ArrayList<>();
+            
+            // Goal 1 (always present)
+            SwapGoalDTO goal1 = createGoalFromSelection(1);
+            goals.add(goal1);
+            System.out.println("🎯 Goal 1: " + goal1.getGoalTarget() + " " + goal1.getAction() + " " + goal1.getTargetValue() + "%");
+            
+            // Goal 2 (if dual goals enabled)
+            if (dualGoalsEnabled) {
+                SwapGoalDTO goal2 = createGoalFromSelection(2);
+                goals.add(goal2);
+                System.out.println("🎯 Goal 2: " + goal2.getGoalTarget() + " " + goal2.getAction() + " " + goal2.getTargetValue() + "%");
+            }
+            
+            // Create mock nutrients (in real implementation, this would come from meal data)
+            ArrayList<GoalNutrientDTO> nutrients = createMockNutrients();
+            System.out.println("🎯 Mock nutrients created: " + nutrients.size() + " nutrients");
+            
+            // Generate suggestions using SwapEngine
+            System.out.println("🎯 Calling SwapEngine with " + goals.size() + " goals...");
+            List<SwapDTO> suggestions = swapFacade.selectStrategyAndSuggest(goals, nutrients);
+            System.out.println("🎯 SwapEngine returned " + suggestions.size() + " suggestions");
+            
+            // Display suggestions (limit to 4)
+            int displayCount = Math.min(4, suggestions.size());
+            if (displayCount > 0) {
+                displaySuggestions(suggestions.subList(0, displayCount), goals);
+            } else {
+                displaySuggestions(suggestions, goals); // Show "no suggestions" message
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Error generating suggestions: " + e.getMessage());
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error generating suggestions: " + e.getMessage(), 
+                "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+    
+    /**
+     * Create a SwapGoalDTO from UI selection
+     */
+    private SwapGoalDTO createGoalFromSelection(int goalNumber) {
+        JComboBox<String> targetCombo = (goalNumber == 1) ? goal1TargetCombo : goal2TargetCombo;
+        JComboBox<String> actionCombo = (goalNumber == 1) ? goal1ActionCombo : goal2ActionCombo;
+        JComboBox<String> intensityCombo = (goalNumber == 1) ? goal1IntensityCombo : goal2IntensityCombo;
+        JComboBox<String> percentageCombo = (goalNumber == 1) ? goal1PercentageCombo : goal2PercentageCombo;
+        
+        String target = (String) targetCombo.getSelectedItem();
+        String action = (String) actionCombo.getSelectedItem();
+        String intensity = (String) intensityCombo.getSelectedItem();
+        String percentage = (String) percentageCombo.getSelectedItem();
+        
+        // Convert to DTO format
+        String goalTarget = target.toLowerCase();
+        SwapGoalDTO.GoalAction goalAction = "Decrease".equals(action) ? 
+            SwapGoalDTO.GoalAction.DECREASE : SwapGoalDTO.GoalAction.INCREASE;
+        
+        // Calculate target percentage based on intensity
+        double targetPercentage;
+        if ("Precise".equals(intensity)) {
+            targetPercentage = Double.parseDouble(percentage.replace("%", ""));
+        } else if ("High".equals(intensity)) {
+            targetPercentage = 30.0;
+        } else { // Normal
+            targetPercentage = 20.0;
+        }
+        
+        SwapGoalDTO goal = new SwapGoalDTO();
+        goal.setGoalTarget(goalTarget);
+        goal.setAction(goalAction);
+        goal.setTargetValue(targetPercentage);
+        goal.setIntensity(targetPercentage / 100.0); // Convert percentage to 0.0-1.0 range
+        
+        return goal;
+    }
+    
+    /**
+     * Create mock nutrients for testing (in real implementation, this would come from selected meal)
+     */
+    private ArrayList<GoalNutrientDTO> createMockNutrients() {
+        ArrayList<GoalNutrientDTO> nutrients = new ArrayList<>();
+        
+        // Mock current meal nutrition
+        nutrients.add(new GoalNutrientDTO("calories", 450.0, "kcal"));
+        nutrients.add(new GoalNutrientDTO("protein", 35.0, "g"));
+        nutrients.add(new GoalNutrientDTO("carbohydrates", 45.0, "g"));
+        nutrients.add(new GoalNutrientDTO("fat", 12.0, "g"));
+        nutrients.add(new GoalNutrientDTO("fiber", 8.0, "g"));
+        
+        return nutrients;
+    }
+    
+    /**
+     * Display suggestions in the middle panel
+     */
+    private void displaySuggestions(List<SwapDTO> suggestions, ArrayList<SwapGoalDTO> goals) {
+        suggestionsListPanel.removeAll();
+        currentSuggestions = suggestions;
+        
+        if (suggestions.isEmpty()) {
+            JLabel noSuggestionsLabel = new JLabel("No suitable swaps found for your goals", SwingConstants.CENTER);
+            noSuggestionsLabel.setFont(new Font("Arial", Font.ITALIC, 12));
+            noSuggestionsLabel.setForeground(Color.GRAY);
+            suggestionsListPanel.add(noSuggestionsLabel);
+        } else {
+            for (int i = 0; i < suggestions.size(); i++) {
+                SwapDTO suggestion = suggestions.get(i);
+                JPanel suggestionPanel = createSuggestionPanel(suggestion, goals, i + 1);
+                suggestionsListPanel.add(suggestionPanel);
+                
+                // Add separator between suggestions
+                if (i < suggestions.size() - 1) {
+                    suggestionsListPanel.add(Box.createVerticalStrut(5));
+                    suggestionsListPanel.add(new JSeparator());
+                    suggestionsListPanel.add(Box.createVerticalStrut(5));
+                }
+            }
+        }
+        
+        suggestionsListPanel.revalidate();
+        suggestionsListPanel.repaint();
+        
+        System.out.println("✅ Displayed " + suggestions.size() + " swap suggestions");
+    }
+    
+    /**
+     * Create a single suggestion panel
+     */
+    private JPanel createSuggestionPanel(SwapDTO suggestion, ArrayList<SwapGoalDTO> goals, int index) {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createLineBorder(Color.LIGHT_GRAY),
+            BorderFactory.createEmptyBorder(8, 8, 8, 8)
+        ));
+        panel.setBackground(Color.WHITE);
+        
+        // Title
+        JLabel titleLabel = new JLabel("#" + index + " - " + suggestion.getOriginalFood() + " → " + 
+                                    suggestion.getReplacementFood(), SwingConstants.LEFT);
+        titleLabel.setFont(new Font("Arial", Font.BOLD, 12));
+        
+        // Goal satisfaction metrics
+        JPanel metricsPanel = new JPanel(new GridLayout(goals.size(), 1, 2, 2));
+        for (int i = 0; i < goals.size(); i++) {
+            SwapGoalDTO goal = goals.get(i);
+            double satisfaction = calculateGoalSatisfaction(suggestion, goal);
+            
+            JLabel metricLabel = new JLabel(String.format("Goal %d (%s %s): %.1f%% satisfied", 
+                i + 1, goal.getAction().toString().toLowerCase(), goal.getGoalTarget(), satisfaction));
+            metricLabel.setFont(new Font("Arial", Font.PLAIN, 10));
+            
+            // Color-code based on satisfaction level
+            if (satisfaction >= 80) {
+                metricLabel.setForeground(new Color(76, 175, 80)); // Green
+            } else if (satisfaction >= 60) {
+                metricLabel.setForeground(new Color(255, 193, 7)); // Yellow
+            } else {
+                metricLabel.setForeground(new Color(244, 67, 54)); // Red
+            }
+            
+            metricsPanel.add(metricLabel);
+        }
+        
+        // Nutritional impact
+        JLabel impactLabel = new JLabel(String.format("Impact: %.1f calories, %.1f protein, %.1f carbs", 
+            suggestion.getCalorieChange(), suggestion.getProteinChange(), suggestion.getCarbohydrateChange()));
+        impactLabel.setFont(new Font("Arial", Font.PLAIN, 10));
+        impactLabel.setForeground(Color.GRAY);
+        
+        panel.add(titleLabel, BorderLayout.NORTH);
+        panel.add(metricsPanel, BorderLayout.CENTER);
+        panel.add(impactLabel, BorderLayout.SOUTH);
+        
+        return panel;
+    }
+    
+    /**
+     * Calculate goal satisfaction percentage for a suggestion
+     */
+    private double calculateGoalSatisfaction(SwapDTO suggestion, SwapGoalDTO goal) {
+        double change = 0;
+        
+        // Get the actual change based on goal target
+        switch (goal.getGoalTarget().toLowerCase()) {
+            case "calories":
+                change = suggestion.getCalorieChange();
+                break;
+            case "protein":
+                change = suggestion.getProteinChange();
+                break;
+            case "carbohydrates":
+                change = suggestion.getCarbohydrateChange();
+                break;
+            case "fat":
+                change = suggestion.getFatChange();
+                break;
+            case "fiber":
+                change = suggestion.getFiberChange();
+                break;
+        }
+        
+        // Calculate satisfaction based on goal action and target percentage
+        double targetChange = goal.getTargetValue();
+        double actualChange = Math.abs(change);
+        
+        if (goal.getAction() == SwapGoalDTO.GoalAction.DECREASE && change < 0) {
+            return Math.min(100, (actualChange / targetChange) * 100);
+        } else if (goal.getAction() == SwapGoalDTO.GoalAction.INCREASE && change > 0) {
+            return Math.min(100, (actualChange / targetChange) * 100);
+        }
+        
+        return 0; // Wrong direction
+    }
+    
+    /**
+     * Show placeholder message when no suggestions are available
+     */
+    private void showPlaceholderMessage() {
+        suggestionsListPanel.removeAll();
+        
+        JLabel placeholderLabel = new JLabel(
+            "<html><div style='text-align: center;'>" +
+            "Select your nutrition goals and click<br/>" +
+            "'Get Swap Suggestions' to see up to 4<br/>" +
+            "personalized recommendations<br/><br/>" +
+            "Each suggestion will show:<br/>" +
+            "• Food replacement options<br/>" +
+            "• Goal satisfaction metrics<br/>" +
+            "• Nutritional impact details" +
+            "</div></html>", 
+            SwingConstants.CENTER
+        );
+        placeholderLabel.setFont(new Font("Arial", Font.PLAIN, 12));
+        placeholderLabel.setForeground(Color.GRAY);
+        
+        suggestionsListPanel.add(placeholderLabel);
+        suggestionsListPanel.revalidate();
+        suggestionsListPanel.repaint();
     }
     
     // ProfileChangeListener implementation (DD-8: Observer Pattern)
@@ -295,7 +749,16 @@ public class SwapPanel extends JPanel implements ProfileChangeListener {
     
     public void refreshPanel() {
         // Refresh logic for external triggers
+        showPlaceholderMessage();
         repaint();
         System.out.println("✅ SwapPanel refreshed");
+    }
+    
+    public List<SwapDTO> getCurrentSuggestions() {
+        return currentSuggestions;
+    }
+    
+    public boolean isDualGoalsEnabled() {
+        return dualGoalsEnabled;
     }
 } 
