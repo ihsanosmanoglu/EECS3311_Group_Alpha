@@ -5,14 +5,14 @@ import ca.nutrisci.infrastructure.external.adapters.INutritionGateway;
 import java.util.*;
 
 /**
- * ReduceCaloriesStrategy - Strategy for reducing calorie content
+ * DecreaseFatStrategy - Strategy for decreasing fat content
  * Part of the Domain Layer - Strategy Pattern
  */
-public class ReduceCaloriesStrategy implements SwapStrategy {
+public class DecreaseFatStrategy implements SwapStrategy {
     
     private INutritionGateway nutritionGateway;
     
-    public ReduceCaloriesStrategy(INutritionGateway nutritionGateway) {
+    public DecreaseFatStrategy(INutritionGateway nutritionGateway) {
         this.nutritionGateway = nutritionGateway;
     }
     
@@ -27,7 +27,7 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
         // Get nutrition info for current food
         NutrientInfo originalNutrition = nutritionGateway.lookupIngredient(currentFood);
         
-        // Find lower-calorie alternatives
+        // Find lower-fat alternatives
         List<String> candidates = findSimilarIngredients(currentFood);
         
         for (String candidate : candidates) {
@@ -35,25 +35,25 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
             
             NutrientInfo candidateNutrition = nutritionGateway.lookupIngredient(candidate);
             
-            // Check if it's actually lower in calories
-            if (candidateNutrition.getCalories() < originalNutrition.getCalories()) {
+            // Check if it's actually lower in fat
+            if (candidateNutrition.getFat() < originalNutrition.getFat()) {
                 SwapDTO swap = createSwap(currentFood, candidate, 
                                         originalNutrition, candidateNutrition, goal);
                 swaps.add(swap);
             }
         }
         
-        return rankByCalorieReduction(swaps);
+        return rankByFatReduction(swaps);
     }
     
     @Override
     public String getGoalType() {
-        return "reduce_calories";
+        return "decrease_fat";
     }
     
     @Override
     public boolean canHandle(SwapGoalDTO goal) {
-        return goal != null && "reduce_calories".equals(goal.getGoalType());
+        return goal != null && "decrease_fat".equals(goal.getGoalType());
     }
     
     @Override
@@ -62,14 +62,14 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
             return 0.0;
         }
         
-        double originalCalories = swap.getOriginalNutrition().getCalories();
-        double replacementCalories = swap.getReplacementNutrition().getCalories();
-        double calorieReduction = originalCalories - replacementCalories;
+        double originalFat = swap.getOriginalNutrition().getFat();
+        double replacementFat = swap.getReplacementNutrition().getFat();
+        double fatReduction = originalFat - replacementFat;
         
-        if (calorieReduction <= 0) return 0.0;
+        if (fatReduction <= 0) return 0.0;
         
         // Score based on percentage reduction
-        double reductionPercent = calorieReduction / originalCalories;
+        double reductionPercent = fatReduction / originalFat;
         return Math.min(1.0, reductionPercent * 2.0); // Cap at 1.0
     }
     
@@ -87,8 +87,8 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
             // Get nutrition info for current ingredient
             NutrientInfo originalNutrition = nutritionGateway.lookupIngredient(ingredient);
             
-            // Find lower-calorie alternatives
-            List<SwapDTO> ingredientSwaps = findLowerCalorieAlternatives(ingredient, quantity, originalNutrition, goal);
+            // Find lower-fat alternatives
+            List<SwapDTO> ingredientSwaps = findLowerFatAlternatives(ingredient, quantity, originalNutrition, goal);
             swaps.addAll(ingredientSwaps);
         }
         
@@ -97,33 +97,33 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
     
     @Override
     public List<SwapDTO> rankByGoal(List<SwapDTO> swaps) {
-        return rankByCalorieReduction(swaps);
+        return rankByFatReduction(swaps);
     }
     
     @Override
     public String getStrategyType() {
-        return "reduce_calories";
+        return "decrease_fat";
     }
     
     @Override
     public String getDescription() {
-        return "Reduces calorie content while maintaining nutritional balance";
+        return "Decreases fat content while maintaining nutritional balance";
     }
     
     // Private helper methods
     
-    private List<SwapDTO> rankByCalorieReduction(List<SwapDTO> swaps) {
-        // Sort by calorie reduction (most reduction first)
+    private List<SwapDTO> rankByFatReduction(List<SwapDTO> swaps) {
+        // Sort by fat reduction (most reduction first)
         swaps.sort((a, b) -> {
-            double calorieChangeA = a.getCalorieChange();
-            double calorieChangeB = b.getCalorieChange();
-            return Double.compare(calorieChangeA, calorieChangeB);
+            double fatChangeA = a.getFatChange();
+            double fatChangeB = b.getFatChange();
+            return Double.compare(fatChangeA, fatChangeB); // Ascending order for reduction
         });
         
         return swaps;
     }
     
-    private List<SwapDTO> findLowerCalorieAlternatives(String originalIngredient, double quantity, 
+    private List<SwapDTO> findLowerFatAlternatives(String originalIngredient, double quantity, 
                                                       NutrientInfo originalNutrition, SwapGoalDTO goal) {
         List<SwapDTO> alternatives = new ArrayList<>();
         
@@ -133,8 +133,8 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
         for (String candidate : candidates) {
             NutrientInfo candidateNutrition = nutritionGateway.lookupIngredient(candidate);
             
-            // Check if it's actually lower in calories
-            if (candidateNutrition.getCalories() < originalNutrition.getCalories()) {
+            // Check if it's actually lower in fat
+            if (candidateNutrition.getFat() < originalNutrition.getFat()) {
                 SwapDTO swap = createSwap(originalIngredient, candidate, 
                                         originalNutrition, candidateNutrition, goal);
                 alternatives.add(swap);
@@ -145,20 +145,26 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
     }
     
     private List<String> findSimilarIngredients(String ingredient) {
-        // Simple ingredient categorization for swaps
+        // Simple ingredient categorization for low-fat swaps
         String lower = ingredient.toLowerCase();
         
-        if (lower.contains("bread") || lower.contains("pasta")) {
-            return Arrays.asList("whole wheat bread", "brown rice", "quinoa", "oats");
-        } else if (lower.contains("beef") || lower.contains("pork")) {
-            return Arrays.asList("chicken breast", "turkey", "fish", "tofu");
-        } else if (lower.contains("milk") || lower.contains("cheese")) {
-            return Arrays.asList("skim milk", "almond milk", "low-fat cheese", "yogurt");
+        if (lower.contains("beef") || lower.contains("pork") || lower.contains("lamb")) {
+            return Arrays.asList("chicken breast", "turkey breast", "fish", "tofu", "egg whites");
+        } else if (lower.contains("chicken thigh") || lower.contains("dark meat")) {
+            return Arrays.asList("chicken breast", "turkey breast", "fish", "egg whites");
+        } else if (lower.contains("cheese") || lower.contains("cream")) {
+            return Arrays.asList("low-fat cheese", "cottage cheese", "skim milk", "greek yogurt");
+        } else if (lower.contains("milk") || lower.contains("yogurt")) {
+            return Arrays.asList("skim milk", "almond milk", "low-fat yogurt", "greek yogurt");
+        } else if (lower.contains("nuts") || lower.contains("seeds") || lower.contains("avocado")) {
+            return Arrays.asList("fruits", "vegetables", "rice", "pasta");
         } else if (lower.contains("oil") || lower.contains("butter")) {
-            return Arrays.asList("olive oil", "cooking spray", "avocado");
+            return Arrays.asList("cooking spray", "broth", "water", "lemon juice");
+        } else if (lower.contains("fried") || lower.contains("crispy")) {
+            return Arrays.asList("grilled", "baked", "steamed", "boiled");
         } else {
-            // Generic alternatives
-            return Arrays.asList("vegetables", "fruits", "lean protein", "whole grains");
+            // Generic low-fat alternatives
+            return Arrays.asList("lean protein", "vegetables", "fruits", "whole grains");
         }
     }
     
@@ -166,11 +172,10 @@ public class ReduceCaloriesStrategy implements SwapStrategy {
                               NutrientInfo originalNutrition, NutrientInfo suggestedNutrition, 
                               SwapGoalDTO goal) {
         
-        // Calculate impact score
-        SwapDTO swap = new SwapDTO(original, suggested, "Lower calorie alternative");
+        SwapDTO swap = new SwapDTO(original, suggested, "Lower fat alternative");
         swap.setOriginalNutrition(originalNutrition);
         swap.setReplacementNutrition(suggestedNutrition);
-        swap.setGoalType("reduce_calories");
+        swap.setGoalType("decrease_fat");
         
         double impactScore = calculateImpactScore(swap, goal);
         swap.setImpactScore(impactScore);

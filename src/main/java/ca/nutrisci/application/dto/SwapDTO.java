@@ -106,6 +106,16 @@ public class SwapDTO {
         return replacementNutrition.getProtein() - originalNutrition.getProtein();
     }
     
+    public double getCarbohydrateChange() {
+        if (originalNutrition == null || replacementNutrition == null) return 0.0;
+        return replacementNutrition.getCarbs() - originalNutrition.getCarbs();
+    }
+    
+    public double getFatChange() {
+        if (originalNutrition == null || replacementNutrition == null) return 0.0;
+        return replacementNutrition.getFat() - originalNutrition.getFat();
+    }
+    
     public String getSwapSummary() {
         if (originalNutrition == null || replacementNutrition == null) {
             return String.format("Replace %s with %s", originalFood, replacementFood);

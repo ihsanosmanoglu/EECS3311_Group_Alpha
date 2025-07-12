@@ -25,15 +25,25 @@ public class SwapStrategyFactory {
      * Initialize available strategies
      */
     private void initializeStrategies() {
-        ReduceCaloriesStrategy reduceCaloriesStrategy = new ReduceCaloriesStrategy(nutritionGateway);
-        IncreaseFiberStrategy increaseFiberStrategy = new IncreaseFiberStrategy(nutritionGateway);
+        // Calorie strategies
+        strategies.put("decrease_calories", new DecreaseCaloriesStrategy(nutritionGateway));
+        strategies.put("increase_calories", new IncreaseCaloriesStrategy(nutritionGateway));
         
-        strategies.put("reduce_calories", reduceCaloriesStrategy);
-        strategies.put("increase_fiber", increaseFiberStrategy);
+        // Protein strategies
+        strategies.put("decrease_protein", new DecreaseProteinStrategy(nutritionGateway));
+        strategies.put("increase_protein", new IncreaseProteinStrategy(nutritionGateway));
         
-        // Add more strategies as needed
-        strategies.put("increase_protein", new IncreaseFiberStrategy(nutritionGateway)); // placeholder
-        strategies.put("reduce_sugar", new ReduceCaloriesStrategy(nutritionGateway)); // placeholder
+        // Carbohydrate strategies
+        strategies.put("decrease_carbohydrates", new DecreaseCarbohydratesStrategy(nutritionGateway));
+        strategies.put("increase_carbohydrates", new IncreaseCarbohydratesStrategy(nutritionGateway));
+        
+        // Fat strategies
+        strategies.put("decrease_fat", new DecreaseFatStrategy(nutritionGateway));
+        strategies.put("increase_fat", new IncreaseFatStrategy(nutritionGateway));
+        
+        // Fiber strategies
+        strategies.put("decrease_fiber", new DecreaseFiberStrategy(nutritionGateway));
+        strategies.put("increase_fiber", new IncreaseFiberStrategy(nutritionGateway));
     }
     
     /**
@@ -48,22 +58,60 @@ public class SwapStrategyFactory {
     }
     
     /**
-     * Get strategy by goal DTO
+     * Get strategy by goal target and action
+     * This method maps from the SwapEngine's goal target names to strategy names
      */
-    public SwapStrategy getStrategy(SwapGoalDTO goal) {
-        if (goal == null) {
+    public SwapStrategy getStrategy(String goalTarget, SwapGoalDTO.GoalAction action) {
+        if (goalTarget == null || action == null) {
             return null;
         }
         
-        return getStrategy(goal.getGoalType());
+        String actionPrefix = (action == SwapGoalDTO.GoalAction.DECREASE) ? "decrease" : "increase";
+        String strategyKey = actionPrefix + "_" + mapGoalTarget(goalTarget);
+        
+        return strategies.get(strategyKey);
     }
     
     /**
-     * Check if strategy exists for goal type
+     * Map goal target names from SwapEngine to strategy naming convention
      */
-    public boolean hasStrategy(String goalType) {
-        return goalType != null && strategies.containsKey(goalType.trim().toLowerCase());
+    private String mapGoalTarget(String goalTarget) {
+        if (goalTarget == null) {
+            return null;
+        }
+        
+        switch (goalTarget.toLowerCase()) {
+            case "calories":
+                return "calories";
+            case "protein":
+                return "protein";
+            case "carbs":
+                return "carbohydrates";
+            case "fat":
+                return "fat";
+            case "fiber":
+                return "fiber";
+            default:
+                return goalTarget.toLowerCase();
+        }
     }
+    
+    /**
+     * Get strategy by goal DTO
+     */
+    public SwapStrategy getStrategy(SwapGoalDTO goal) {
+        if (goal.getGoalTarget() == null || goal.getAction() == null) {
+            return null;
+        }
+        
+        String actionPrefix = (goal.getAction() == SwapGoalDTO.GoalAction.DECREASE) ? "decrease" : "increase";
+        String strategyKey = actionPrefix + "_" + mapGoalTarget(goal.getGoalTarget());
+        
+        return strategies.get(strategyKey);
+    }
+    
+    
+   
     
     /**
      * Get all available goal types
@@ -75,18 +123,22 @@ public class SwapStrategyFactory {
     /**
      * Add a new strategy
      */
-    public void addStrategy(String goalType, SwapStrategy strategy) {
-        if (goalType != null && strategy != null) {
-            strategies.put(goalType.trim().toLowerCase(), strategy);
+    public void addStrategy(String goalTarget, SwapGoalDTO.GoalAction action, SwapStrategy strategy) {
+        if (goalTarget != null && strategy != null) {
+            String actionPrefix = (action == SwapGoalDTO.GoalAction.DECREASE) ? "decrease" : "increase";
+            String strategyKey = actionPrefix + "_" + mapGoalTarget(goalTarget);
+            strategies.put(strategyKey, strategy);
         }
     }
     
     /**
      * Remove a strategy
      */
-    public void removeStrategy(String goalType) {
-        if (goalType != null) {
-            strategies.remove(goalType.trim().toLowerCase());
+    public void removeStrategy(String goalTarget, SwapGoalDTO.GoalAction action) {
+        if (goalTarget != null) {
+            String actionPrefix = (action == SwapGoalDTO.GoalAction.DECREASE) ? "decrease" : "increase";
+            String strategyKey = actionPrefix + "_" + mapGoalTarget(goalTarget);
+            strategies.remove(strategyKey);
         }
     }
 } 

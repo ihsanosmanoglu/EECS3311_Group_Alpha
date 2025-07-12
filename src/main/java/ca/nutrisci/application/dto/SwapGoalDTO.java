@@ -6,46 +6,49 @@ package ca.nutrisci.application.dto;
  */
 public class SwapGoalDTO {
     
-    private String goalType; // "reduce_calories", "increase_fiber", "reduce_sodium", etc.
+    // Enum for goal actions
+    public enum GoalAction {
+        INCREASE, DECREASE
+    }
+    
+    private String goalTarget; // "calories", "fiber", "protein", etc.
+    private GoalAction action; // INCREASE or DECREASE
     private double intensity; // 0.0 to 1.0 (low to high intensity)
     private double targetValue; // specific target value (e.g., 100 calories, 5g fiber)
-    private String targetNutrient; // specific nutrient to target
     
     // Default constructor
     public SwapGoalDTO() {
         this.intensity = 0.5; // moderate intensity by default
         this.targetValue = 0.0;
+        this.goalTarget = "calories";
+        this.action = GoalAction.DECREASE;
     }
     
-    // Constructor with basic goal and target value
-    public SwapGoalDTO(String goalType, double targetValue) {
-        this.goalType = goalType;
+    // Constructor with nutrient, action, and target value
+    public SwapGoalDTO(String goalTarget, GoalAction action, double targetValue) {
+        this.goalTarget = goalTarget;
+        this.action = action;
         this.targetValue = targetValue;
         this.intensity = 0.5; // moderate intensity by default
-        this.targetNutrient = extractNutrientFromGoalType(goalType);
     }
     
-    // Constructor with goal, intensity, and target value
-    public SwapGoalDTO(String goalType, double intensity, double targetValue) {
-        this.goalType = goalType;
+    // Constructor with full parameters
+    public SwapGoalDTO(String goalTarget, GoalAction action, double intensity, double targetValue) {
+        this.goalTarget = goalTarget;
+        this.action = action;
         this.intensity = Math.max(0.0, Math.min(1.0, intensity));
         this.targetValue = targetValue;
-        this.targetNutrient = extractNutrientFromGoalType(goalType);
-    }
-    
-    // Full constructor
-    public SwapGoalDTO(String goalType, double intensity, double targetValue, String targetNutrient) {
-        this.goalType = goalType;
-        this.intensity = Math.max(0.0, Math.min(1.0, intensity));
-        this.targetValue = targetValue;
-        this.targetNutrient = targetNutrient;
     }
     
     // Getters and Setters
-    public String getGoalType() { return goalType; }
-    public void setGoalType(String goalType) { 
-        this.goalType = goalType;
-        this.targetNutrient = extractNutrientFromGoalType(goalType);
+    public String getGoalTarget() { return goalTarget; }
+    public void setGoalTarget(String goalTarget) { 
+        this.goalTarget = goalTarget; 
+    }
+    
+    public GoalAction getAction() { return action; }
+    public void setAction(GoalAction action) { 
+        this.action = action; 
     }
     
     public double getIntensity() { return intensity; }
@@ -58,18 +61,13 @@ public class SwapGoalDTO {
         this.targetValue = targetValue; 
     }
     
-    public String getTargetNutrient() { return targetNutrient; }
-    public void setTargetNutrient(String targetNutrient) { 
-        this.targetNutrient = targetNutrient; 
-    }
-    
     // Utility methods
     public boolean isReduceGoal() {
-        return goalType != null && goalType.toLowerCase().contains("reduce");
+        return action == GoalAction.DECREASE;
     }
     
     public boolean isIncreaseGoal() {
-        return goalType != null && goalType.toLowerCase().contains("increase");
+        return action == GoalAction.INCREASE;
     }
     
     public String getIntensityLevel() {
@@ -78,49 +76,39 @@ public class SwapGoalDTO {
         else return "High";
     }
     
-    private String extractNutrientFromGoalType(String goalType) {
-        if (goalType == null) return null;
-        
-        String lower = goalType.toLowerCase();
-        if (lower.contains("calorie")) return "calories";
-        if (lower.contains("fiber")) return "fiber";
-        if (lower.contains("protein")) return "protein";
-        if (lower.contains("sodium")) return "sodium";
-        if (lower.contains("fat")) return "fat";
-        if (lower.contains("carb")) return "carbs";
-        if (lower.contains("sugar")) return "sugar";
-        
-        return "calories"; // default
+    // Backward compatibility - get goal type as string
+    public String getGoalType() {
+        return action.name().toLowerCase() + "_" + goalTarget;
     }
     
     // Validation
     public boolean isValid() {
-        return goalType != null && !goalType.trim().isEmpty() &&
+        return goalTarget != null && !goalTarget.trim().isEmpty() &&
+               action != null &&
                intensity >= 0.0 && intensity <= 1.0 &&
-               targetValue >= 0.0 &&
-               targetNutrient != null && !targetNutrient.trim().isEmpty();
+               targetValue >= 0.0;
     }
     
     // Predefined goal types
     public static SwapGoalDTO reduceCalories(double targetValue) {
-        return new SwapGoalDTO("reduce_calories", targetValue);
+        return new SwapGoalDTO("calories", GoalAction.DECREASE, targetValue);
     }
     
     public static SwapGoalDTO increaseFiber(double targetValue) {
-        return new SwapGoalDTO("increase_fiber", targetValue);
+        return new SwapGoalDTO("fiber", GoalAction.INCREASE, targetValue);
     }
     
     public static SwapGoalDTO reduceNutrient(String nutrient, double targetValue) {
-        return new SwapGoalDTO("reduce_" + nutrient, targetValue);
+        return new SwapGoalDTO(nutrient, GoalAction.DECREASE, targetValue);
     }
     
     public static SwapGoalDTO increaseNutrient(String nutrient, double targetValue) {
-        return new SwapGoalDTO("increase_" + nutrient, targetValue);
+        return new SwapGoalDTO(nutrient, GoalAction.INCREASE, targetValue);
     }
     
     @Override
     public String toString() {
-        return String.format("SwapGoalDTO{goalType='%s', intensity=%.2f (%s), targetValue=%.1f, targetNutrient='%s'}",
-                goalType, intensity, getIntensityLevel(), targetValue, targetNutrient);
+        return String.format("SwapGoalDTO{goalTarget='%s', action=%s, intensity=%.2f (%s), targetValue=%.1f}",
+                goalTarget, action, intensity, getIntensityLevel(), targetValue);
     }
 } 

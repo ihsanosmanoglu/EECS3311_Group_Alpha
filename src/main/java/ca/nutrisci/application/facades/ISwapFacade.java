@@ -1,69 +1,54 @@
 package ca.nutrisci.application.facades;
 
+import ca.nutrisci.application.dto.GoalNutrientDTO;
 import ca.nutrisci.application.dto.SwapDTO;
 import ca.nutrisci.application.dto.SwapGoalDTO;
+import ca.nutrisci.application.dto.SwapResultDTO;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
+import java.util.ArrayList;
 
 /**
  * ISwapFacade - Interface for food swap operations
  * Part of the Application Layer - Facade Pattern
  */
 public interface ISwapFacade {
-    
+
     /**
-     * Find food swaps based on goal
+     * Selects a swap strategy based on the goal and suggests swaps.
+     * Used by ScreenControllers.
+     * @param goal The swap goal.
+     * @param nutrient The target nutrient for the goal.
+     * @return A list of swap suggestions.
      */
-    List<SwapDTO> findSwaps(String currentFood, SwapGoalDTO goal);
-    
+    List<SwapDTO> selectStrategyAndSuggest(ArrayList<SwapGoalDTO> goals, ArrayList<GoalNutrientDTO> nutrients);
+
     /**
-     * Apply a food swap
+     * Previews the impact of a potential swap on a meal.
+     * Used by ScreenControllers.
+     * @param mealId The ID of the meal.
+     * @param proposal The proposed swap.
+     * @return The result of the swap preview.
      */
-    SwapDTO applySwap(UUID profileId, SwapDTO swapDTO);
-    
+    SwapResultDTO previewSwap(UUID mealId, SwapDTO proposal);
+
     /**
-     * Get swap suggestions based on goal
+     * Applies a chosen swap to a meal.
+     * Used by ScreenControllers.
+     * @param mealId The ID of the meal.
+     * @param chosen The chosen swap.
+     * @return The result of applying the swap.
      */
-    List<SwapDTO> getSwapSuggestions(String goalType, List<String> currentFoods);
-    
+    SwapResultDTO applySwap(UUID mealId, SwapDTO chosen);
+
     /**
-     * Get swap history for a profile
+     * Lists all applied swaps within a given date range.
+     * Used by ScreenControllers and for Visualization.
+     * @param from The start date of the period.
+     * @param to The end date of the period.
+     * @return A list of applied swaps.
      */
-    List<SwapDTO> getSwapHistory(UUID profileId);
-    
-    /**
-     * Get swap history by goal
-     */
-    List<SwapDTO> getSwapHistoryByGoal(UUID profileId, String goalType);
-    
-    /**
-     * Analyze swap impact
-     */
-    String analyzeSwapImpact(SwapDTO swapDTO);
-    
-    /**
-     * Validate swap data
-     */
-    boolean validateSwap(SwapDTO swapDTO);
-    
-    /**
-     * Get available goal types
-     */
-    List<String> getAvailableGoalTypes();
-    
-    /**
-     * Create swap goal
-     */
-    SwapGoalDTO createSwapGoal(String goalType, double targetValue);
-    
-    /**
-     * Delete swap from history
-     */
-    void deleteSwapHistory(UUID swapHistoryId);
-    
-    /**
-     * Get swap statistics for profile
-     */
-    String getSwapStatistics(UUID profileId);
+    List<SwapDTO> listAppliedSwaps(LocalDate from, LocalDate to);
 } 
