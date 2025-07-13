@@ -40,14 +40,14 @@ public class ChartsService {
     /**
      * Create top nutrients chart showing daily averages
      */
-    public ChartDTO createTopNutrientsChart(UUID profileId, LocalDate from, LocalDate to) {
-        System.out.println("[DEBUG] createTopNutrientsChart called with profileId=" + profileId + ", from=" + from + ", to=" + to);
+    public ChartDTO createTopNutrientsChart(UUID profileId, LocalDate from, LocalDate to, int topN) {
+        System.out.println("[DEBUG] createTopNutrientsChart called with profileId=" + profileId + ", from=" + from + ", to=" + to + ", topN=" + topN);
         if (profileId == null || from == null || to == null) {
             return ChartDTO.createEmptyChart("Daily Nutrient Intake", ChartDTO.ChartType.PIE);
         }
 
         // Check cache first
-        String chartKey = "top_nutrients_" + from + "_" + to;
+        String chartKey = "top_nutrients_" + from + "_" + to + "_" + topN;
         ChartDTO cachedChart = chartCache.getCachedChart(profileId, chartKey);
         if (cachedChart != null) {
             return cachedChart;
@@ -89,10 +89,10 @@ public class ChartsService {
         // Calculate daily averages
         totalNutrients.replaceAll((k, v) -> v / daysInRange);
 
-        // Sort nutrients by value and get top 5
+        // Sort nutrients by value and get top N
         Map<String, Double> sortedNutrients = totalNutrients.entrySet().stream()
             .sorted(Map.Entry.<String, Double>comparingByValue().reversed())
-            .limit(5)
+            .limit(topN)
             .collect(Collectors.toMap(
                 Map.Entry::getKey,
                 Map.Entry::getValue,
@@ -119,6 +119,17 @@ public class ChartsService {
         if (otherTotal > 0) {
             chart.addDataPoint("Other", otherTotal);
         }
+
+        // Calculate percentages for each nutrient (including 'Other')
+        double total = sortedNutrients.values().stream().mapToDouble(Double::doubleValue).sum() + otherTotal;
+        Map<String, Double> percentages = new LinkedHashMap<>();
+        sortedNutrients.forEach((k, v) -> {
+            percentages.put(k, total > 0 ? (v / total) * 100.0 : 0.0);
+        });
+        if (otherTotal > 0) {
+            percentages.put("Other", total > 0 ? (otherTotal / total) * 100.0 : 0.0);
+        }
+        chart.setNutrientPercentages(percentages);
 
         // Cache the chart
         chartCache.cacheChart(profileId, chartKey, chart);

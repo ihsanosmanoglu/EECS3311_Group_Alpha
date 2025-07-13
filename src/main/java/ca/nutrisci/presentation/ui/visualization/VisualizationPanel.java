@@ -27,6 +27,11 @@ public class VisualizationPanel extends JPanel {
     private JPanel chartStylePanel;
     private VisualizationController controller;
     private JPanel feedbackPanel = new JPanel();
+    private JComboBox<Integer> topNCombo; // Add this line
+    private JPanel nutrientPercentPanel; // Add this line
+    private JLabel topNLabel; // Add this line
+    private JComboBox<String> cfgChartStyleCombo; // Add this line
+    private JLabel cfgChartStyleLabel; // Add this line
 
     // Chart type options
     private static final String TOP_NUTRIENTS = "Top Nutrients";
@@ -85,6 +90,18 @@ public class VisualizationPanel extends JPanel {
         
         chartTypePanel.add(chartTypeLabel);
         chartTypePanel.add(chartTypeCombo);
+        // Add Top N Nutrients selector (initially visible only for Top Nutrients)
+        topNLabel = new JLabel("Show Top:");
+        topNCombo = new JComboBox<>(new Integer[]{5, 10});
+        chartTypePanel.add(topNLabel);
+        chartTypePanel.add(topNCombo);
+        // Add CFG Alignment chart style toggle (initially hidden)
+        cfgChartStyleLabel = new JLabel("Chart Style:");
+        cfgChartStyleCombo = new JComboBox<>(new String[]{"Bar Chart", "Plate View"});
+        chartTypePanel.add(cfgChartStyleLabel);
+        chartTypePanel.add(cfgChartStyleCombo);
+        cfgChartStyleLabel.setVisible(false);
+        cfgChartStyleCombo.setVisible(false);
         
         // Nutrient Selection Panel (initially hidden)
         nutrientPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
@@ -124,15 +141,24 @@ public class VisualizationPanel extends JPanel {
         add(controlPanel, BorderLayout.NORTH);
         add(chartContainer, BorderLayout.CENTER);
         add(feedbackPanel, BorderLayout.SOUTH);
-        
+        // Add nutrient percentage panel below chart
+        nutrientPercentPanel = new JPanel();
+        nutrientPercentPanel.setLayout(new BoxLayout(nutrientPercentPanel, BoxLayout.Y_AXIS));
+        add(nutrientPercentPanel, BorderLayout.EAST);
         // Add placeholder initially
         chartContainer.add(placeholderLabel, BorderLayout.CENTER);
     }
 
     private void updateVisiblePanels() {
         boolean isSwapImpact = FOOD_SWAP_IMPACT.equals(chartTypeCombo.getSelectedItem());
+        boolean isTopNutrients = TOP_NUTRIENTS.equals(chartTypeCombo.getSelectedItem());
+        boolean isCfgAlignment = CFG_ALIGNMENT.equals(chartTypeCombo.getSelectedItem());
         nutrientPanel.setVisible(isSwapImpact);
         chartStylePanel.setVisible(isSwapImpact);
+        topNLabel.setVisible(isTopNutrients);
+        topNCombo.setVisible(isTopNutrients);
+        cfgChartStyleLabel.setVisible(isCfgAlignment);
+        cfgChartStyleCombo.setVisible(isCfgAlignment);
         revalidate();
         repaint();
     }
@@ -161,10 +187,12 @@ public class VisualizationPanel extends JPanel {
         }
         switch (selectedType) {
             case TOP_NUTRIENTS:
-                controller.loadDailyIntakeChart(startDate, endDate);
+                int topN = (Integer) topNCombo.getSelectedItem();
+                controller.loadDailyIntakeChart(startDate, endDate, topN);
                 break;
             case CFG_ALIGNMENT:
-                controller.loadCfgAlignmentChart(startDate, endDate);
+                String cfgChartStyle = (String) cfgChartStyleCombo.getSelectedItem();
+                controller.loadCfgAlignmentChart(startDate, endDate, cfgChartStyle);
                 break;
             case FOOD_SWAP_IMPACT:
                 String nutrient = (String) nutrientCombo.getSelectedItem();
@@ -181,6 +209,7 @@ public class VisualizationPanel extends JPanel {
     public void updateChart(JFreeChart chart, Object chartDTO) {
         chartContainer.removeAll();
         feedbackPanel.removeAll();
+        nutrientPercentPanel.removeAll(); // Clear the nutrient percentage panel
 
         boolean showMessage = false;
         String message = null;
@@ -203,37 +232,48 @@ public class VisualizationPanel extends JPanel {
             chartPanel.setMouseWheelEnabled(true);
             chartPanel.setMouseZoomable(true);
             chartContainer.add(chartPanel, BorderLayout.CENTER);
+            // Show nutrient percentages for Top Nutrients chart
+            if (chartDTO instanceof ca.nutrisci.application.dto.ChartDTO) {
+                ca.nutrisci.application.dto.ChartDTO dto = (ca.nutrisci.application.dto.ChartDTO) chartDTO;
+                if ("Daily Nutrient Intake".equals(dto.getTitle())) {
+                    java.util.Map<String, Double> percentages = dto.getNutrientPercentages();
+                    if (percentages != null && !percentages.isEmpty()) {
+                        nutrientPercentPanel.add(new JLabel("Nutrient Percentages:"));
+                        for (java.util.Map.Entry<String, Double> entry : percentages.entrySet()) {
+                            String label = String.format("%s: %.1f%%", entry.getKey(), entry.getValue());
+                            nutrientPercentPanel.add(new JLabel(label));
+                        }
+                    }
+                }
+            }
             // Contextual feedback for CFG Alignment chart
-            if (chartDTO != null && chartDTO.getClass().getSimpleName().equals("GroupedBarChartDTO")) {
-                try {
-                    java.util.List<String> categories = (java.util.List<String>) chartDTO.getClass().getMethod("getCategories").invoke(chartDTO);
-                    java.util.Map<String, Double> actuals = (java.util.Map<String, Double>) chartDTO.getClass().getMethod("getActuals").invoke(chartDTO);
-                    java.util.Map<String, Double> recommendations = (java.util.Map<String, Double>) chartDTO.getClass().getMethod("getRecommendations").invoke(chartDTO);
-                    boolean anyWithin50 = false;
-                    int within10 = 0;
-                    JPanel feedbackList = new JPanel();
-                    feedbackList.setLayout(new BoxLayout(feedbackList, BoxLayout.Y_AXIS));
-                    for (String group : categories) {
-                        double actual = actuals.getOrDefault(group, 0.0);
-                        double rec = recommendations.getOrDefault(group, 0.0);
-                        String icon = "";
-                        double percent = rec > 0 ? (actual / rec) * 100 : 0;
-                        if (rec > 0 && Math.abs(percent - 100) <= 10) { icon = "✅"; within10++; anyWithin50 = true; }
-                        else if (rec > 0 && percent < 70) { icon = "⚠️"; }
-                        else if (rec > 0 && percent > 300) { icon = "❌"; }
-                        else if (rec > 0 && Math.abs(percent - 100) <= 50) { anyWithin50 = true; }
-                        String label = String.format("%s %s: %.0f%% of recommended", icon, group, percent);
-                        JLabel feedbackLabel = new JLabel(label);
-                        feedbackList.add(feedbackLabel);
-                    }
-                    feedbackPanel.add(feedbackList);
-                    if (!anyWithin50) {
-                        JLabel warn = new JLabel("Your current intake is far from CFG recommendations. Consider adjusting your meals.");
-                        warn.setForeground(java.awt.Color.RED);
-                        feedbackPanel.add(warn);
-                    }
-                } catch (Exception e) {
-                    // ignore
+            if (chartDTO instanceof ca.nutrisci.application.dto.GroupedBarChartDTO) {
+                ca.nutrisci.application.dto.GroupedBarChartDTO dto = (ca.nutrisci.application.dto.GroupedBarChartDTO) chartDTO;
+                java.util.List<String> categories = dto.getCategories();
+                java.util.Map<String, Double> actuals = dto.getActuals();
+                java.util.Map<String, Double> recommendations = dto.getRecommendations();
+                boolean anyWithin50 = false;
+                int within10 = 0;
+                JPanel feedbackList = new JPanel();
+                feedbackList.setLayout(new BoxLayout(feedbackList, BoxLayout.Y_AXIS));
+                for (String group : categories) {
+                    double actual = actuals.getOrDefault(group, 0.0);
+                    double rec = recommendations.getOrDefault(group, 0.0);
+                    String icon = "";
+                    double percent = rec > 0 ? (actual / rec) * 100 : 0;
+                    if (rec > 0 && Math.abs(percent - 100) <= 10) { icon = "✅"; within10++; anyWithin50 = true; }
+                    else if (rec > 0 && percent < 70) { icon = "⚠️"; }
+                    else if (rec > 0 && percent > 300) { icon = "❌"; }
+                    else if (rec > 0 && Math.abs(percent - 100) <= 50) { anyWithin50 = true; }
+                    String label = String.format("%s %s: %.0f%% of recommended", icon, group, percent);
+                    JLabel feedbackLabel = new JLabel(label);
+                    feedbackList.add(feedbackLabel);
+                }
+                feedbackPanel.add(feedbackList);
+                if (!anyWithin50) {
+                    JLabel warn = new JLabel("Your current intake is far from CFG recommendations. Consider adjusting your meals.");
+                    warn.setForeground(java.awt.Color.RED);
+                    feedbackPanel.add(warn);
                 }
             }
         } else if (showMessage && message != null) {
@@ -248,5 +288,11 @@ public class VisualizationPanel extends JPanel {
         chartContainer.repaint();
         feedbackPanel.revalidate();
         feedbackPanel.repaint();
+        nutrientPercentPanel.revalidate();
+        nutrientPercentPanel.repaint();
+    }
+
+    public JPanel getChartContainer() {
+        return chartContainer;
     }
 } 

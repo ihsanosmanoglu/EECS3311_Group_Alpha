@@ -14,6 +14,10 @@ import org.jfree.data.category.DefaultCategoryDataset;
 import org.jfree.data.general.DefaultPieDataset;
 import java.awt.Color;
 import java.awt.Font;
+import javax.swing.JPanel;
+import java.awt.GridLayout;
+import java.awt.Dimension;
+import org.jfree.chart.ChartPanel;
 
 /**
  * Factory for creating JFreeChart instances from ChartDTO
@@ -277,5 +281,60 @@ public class ChartFactory {
         rangeAxis.setLabelFont(LABEL_FONT);
 
         return chart;
+    }
+
+    /**
+     * Creates a JPanel with two pie charts side by side: user's plate and CFG plate
+     * @param userPlate Map of food group to value (user's data, e.g., averaged servings)
+     * @param cfgPlate Map of food group to value (CFG recommended proportions)
+     * @return JPanel containing the two pie charts
+     */
+    public static JPanel createPlateViewCharts(java.util.Map<String, Double> userPlate, java.util.Map<String, Double> cfgPlate) {
+        JPanel panel = new JPanel();
+        panel.setLayout(new GridLayout(1, 2, 20, 0));
+
+        // User's Plate Pie Chart
+        DefaultPieDataset userDataset = new DefaultPieDataset();
+        userPlate.forEach(userDataset::setValue);
+        JFreeChart userChart = org.jfree.chart.ChartFactory.createPieChart(
+            "Your Plate",
+            userDataset,
+            true,  // legend
+            true,  // tooltips
+            false  // URLs
+        );
+        userChart.setBackgroundPaint(Color.WHITE);
+        userChart.getTitle().setFont(TITLE_FONT);
+        PiePlot userPlot = (PiePlot) userChart.getPlot();
+        userPlot.setSectionPaint("Vegetables and Fruits", new Color(102, 204, 102));
+        userPlot.setSectionPaint("Whole Grains", new Color(255, 204, 102));
+        userPlot.setSectionPaint("Protein Foods", new Color(153, 153, 255));
+        userPlot.setSectionPaint("Other", OTHER_COLOR);
+        ChartPanel userChartPanel = new ChartPanel(userChart);
+        userChartPanel.setPreferredSize(new Dimension(300, 300));
+
+        // CFG Plate Pie Chart
+        DefaultPieDataset cfgDataset = new DefaultPieDataset();
+        cfgPlate.forEach(cfgDataset::setValue);
+        JFreeChart cfgChart = org.jfree.chart.ChartFactory.createPieChart(
+            "CFG Plate",
+            cfgDataset,
+            true,  // legend
+            true,  // tooltips
+            false  // URLs
+        );
+        cfgChart.setBackgroundPaint(Color.WHITE);
+        cfgChart.getTitle().setFont(TITLE_FONT);
+        PiePlot cfgPlot = (PiePlot) cfgChart.getPlot();
+        cfgPlot.setSectionPaint("Vegetables and Fruits", new Color(102, 204, 102));
+        cfgPlot.setSectionPaint("Whole Grains", new Color(255, 204, 102));
+        cfgPlot.setSectionPaint("Protein Foods", new Color(153, 153, 255));
+        cfgPlot.setSectionPaint("Other", OTHER_COLOR);
+        ChartPanel cfgChartPanel = new ChartPanel(cfgChart);
+        cfgChartPanel.setPreferredSize(new Dimension(300, 300));
+
+        panel.add(userChartPanel);
+        panel.add(cfgChartPanel);
+        return panel;
     }
 } 

@@ -256,7 +256,7 @@ public class MainApplication {
         // Visualization panel
         VisualizationPanel vizPanel = new VisualizationPanel();
         IVisualizationFacade visualizationFacade = new Visualization(new ChartsService(repoFactory.getMealLogRepository(), repoFactory.getSwapHistoryRepository()));
-        VisualizationController vizController = new VisualizationController(visualizationFacade, vizPanel);
+        VisualizationController vizController = new VisualizationController(visualizationFacade, vizPanel, mealLogFacade);
         vizController.setCurrentProfile(currentProfile.getId());
         vizPanel.setController(vizController);
         System.out.println("[DEBUG] VisualizationPanel controller set: " + (vizPanel != null && vizController != null));

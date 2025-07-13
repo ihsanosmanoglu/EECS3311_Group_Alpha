@@ -4,6 +4,7 @@ import ca.nutrisci.application.dto.ChartDTO;
 import ca.nutrisci.application.dto.GroupedBarChartDTO;
 import ca.nutrisci.application.dto.SwapImpactDTO;
 import ca.nutrisci.application.facades.IVisualizationFacade;
+import ca.nutrisci.application.facades.IMealLogFacade;
 import ca.nutrisci.presentation.ui.visualization.ChartFactory;
 import ca.nutrisci.presentation.ui.visualization.VisualizationPanel;
 import org.jfree.chart.JFreeChart;
@@ -17,11 +18,13 @@ import java.util.UUID;
 public class VisualizationController {
     private final IVisualizationFacade visualizationFacade;
     private final VisualizationPanel visualizationPanel;
+    private final IMealLogFacade mealLogFacade;
     private UUID currentProfileId;
 
-    public VisualizationController(IVisualizationFacade visualizationFacade, VisualizationPanel visualizationPanel) {
+    public VisualizationController(IVisualizationFacade visualizationFacade, VisualizationPanel visualizationPanel, IMealLogFacade mealLogFacade) {
         this.visualizationFacade = visualizationFacade;
         this.visualizationPanel = visualizationPanel;
+        this.mealLogFacade = mealLogFacade;
     }
 
     public void setCurrentProfile(UUID profileId) {
@@ -32,20 +35,75 @@ public class VisualizationController {
         return currentProfileId;
     }
 
-    public void loadDailyIntakeChart(LocalDate from, LocalDate to) {
-        System.out.println("[DEBUG] loadDailyIntakeChart: currentProfileId=" + currentProfileId + ", from=" + from + ", to=" + to);
+    public void loadDailyIntakeChart(LocalDate from, LocalDate to, int topN) {
+        System.out.println("[DEBUG] loadDailyIntakeChart: currentProfileId=" + currentProfileId + ", from=" + from + ", to=" + to + ", topN=" + topN);
         if (currentProfileId == null) {
             throw new IllegalStateException("No profile selected");
         }
-        ChartDTO chartData = visualizationFacade.buildDailyIntakeChart(currentProfileId, from, to);
+        ChartDTO chartData = visualizationFacade.buildDailyIntakeChart(currentProfileId, from, to, topN);
+        if (!chartData.hasData() && chartData.getMessage() != null) {
+            // Show message instead of chart
+            visualizationPanel.updateChart(null, chartData);
+            return;
+        }
         JFreeChart chart = ChartFactory.createChart(chartData);
         visualizationPanel.updateChart(chart, chartData);
     }
 
-    public void loadCfgAlignmentChart(LocalDate from, LocalDate to) {
-        System.out.println("[DEBUG] loadCfgAlignmentChart: currentProfileId=" + currentProfileId + ", from=" + from + ", to=" + to);
+    public void loadCfgAlignmentChart(LocalDate from, LocalDate to, String chartStyle) {
+        System.out.println("[DEBUG] loadCfgAlignmentChart: currentProfileId=" + currentProfileId + ", from=" + from + ", to=" + to + ", chartStyle=" + chartStyle);
         if (currentProfileId == null) {
             throw new IllegalStateException("No profile selected");
+        }
+        if ("Plate View".equals(chartStyle)) {
+            // Plate View logic
+            java.util.List<ca.nutrisci.application.dto.MealDTO> meals = mealLogFacade.getMealsForDateRange(currentProfileId, from, to);
+            java.util.Map<String, Double> userPlate = new java.util.HashMap<>();
+            long daysInRange = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
+            for (ca.nutrisci.application.dto.MealDTO meal : meals) {
+                if (meal.getFoodGroupServings() != null) {
+                    for (var entry : meal.getFoodGroupServings().entrySet()) {
+                        String group = entry.getKey().toString().replace("_", " ").replace("AND", "and").toLowerCase();
+                        if (group.contains("vegetable") || group.contains("fruit")) group = "Vegetables and Fruits";
+                        else if (group.contains("grain")) group = "Whole Grains";
+                        else if (group.contains("protein")) group = "Protein Foods";
+                        else group = "Other";
+                        userPlate.merge(group, entry.getValue(), Double::sum);
+                    }
+                }
+            }
+            userPlate.replaceAll((k, v) -> v / (double) daysInRange);
+            // Only keep the three main groups
+            java.util.Map<String, Double> userPlateFinal = new java.util.LinkedHashMap<>();
+            userPlateFinal.put("Vegetables and Fruits", userPlate.getOrDefault("Vegetables and Fruits", 0.0));
+            userPlateFinal.put("Whole Grains", userPlate.getOrDefault("Whole Grains", 0.0));
+            userPlateFinal.put("Protein Foods", userPlate.getOrDefault("Protein Foods", 0.0));
+            // If all are zero, show warning
+            boolean hasData = userPlateFinal.values().stream().anyMatch(v -> v > 0.01);
+            if (!hasData) {
+                javax.swing.JLabel warn = new javax.swing.JLabel("No data available for selected date range. Please log meals or choose a different period.", javax.swing.SwingConstants.CENTER);
+                warn.setFont(new java.awt.Font("Arial", java.awt.Font.BOLD, 16));
+                javax.swing.JPanel chartContainer = this.visualizationPanel.getChartContainer();
+                chartContainer.removeAll();
+                chartContainer.setLayout(new java.awt.BorderLayout());
+                chartContainer.add(warn, java.awt.BorderLayout.CENTER);
+                chartContainer.revalidate();
+                chartContainer.repaint();
+                return;
+            }
+            // CFG plate proportions (hardcoded)
+            java.util.Map<String, Double> cfgPlate = new java.util.LinkedHashMap<>();
+            cfgPlate.put("Vegetables and Fruits", 50.0);
+            cfgPlate.put("Whole Grains", 25.0);
+            cfgPlate.put("Protein Foods", 25.0);
+            javax.swing.JPanel platePanel = ca.nutrisci.presentation.ui.visualization.ChartFactory.createPlateViewCharts(userPlateFinal, cfgPlate);
+            javax.swing.JPanel chartContainer = this.visualizationPanel.getChartContainer();
+            chartContainer.removeAll();
+            chartContainer.setLayout(new java.awt.BorderLayout());
+            chartContainer.add(platePanel, java.awt.BorderLayout.CENTER);
+            chartContainer.revalidate();
+            chartContainer.repaint();
+            return;
         }
         GroupedBarChartDTO chartData = visualizationFacade.buildCfgAlignmentChart(currentProfileId, from, to);
         if (!chartData.hasData() && chartData.getMessage() != null) {
@@ -54,7 +112,7 @@ public class VisualizationController {
             return;
         }
         JFreeChart chart = ChartFactory.createGroupedBarChart(chartData);
-        visualizationPanel.updateChart(chart, null);
+        visualizationPanel.updateChart(chart, chartData);
     }
 
     /**

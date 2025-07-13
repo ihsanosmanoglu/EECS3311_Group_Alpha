@@ -12,7 +12,7 @@ import java.util.UUID;
  * Interface for visualization operations
  */
 public interface IVisualizationFacade {
-    ChartDTO buildDailyIntakeChart(UUID profileId, LocalDate from, LocalDate to);
+    ChartDTO buildDailyIntakeChart(UUID profileId, LocalDate from, LocalDate to, int topN);
     GroupedBarChartDTO buildCfgAlignmentChart(UUID profileId, LocalDate from, LocalDate to);
     ChartDTO buildSwapImpactChart(UUID profileId, NutrientType nutrient, LocalDate from, LocalDate to);
     SwapImpactDTO buildSwapImpactChart(LocalDate startDate, LocalDate endDate, String nutrient, String chartStyle, UUID profileId);

@@ -21,7 +21,7 @@ public class NutrientViewController {
     }
 
     public void showDailyIntakeChart(UUID profileId, LocalDate from, LocalDate to) {
-        ChartDTO chartData = visualizationFacade.buildDailyIntakeChart(profileId, from, to);
+        ChartDTO chartData = visualizationFacade.buildDailyIntakeChart(profileId, from, to, 5); // Default to top 5 nutrients
         var chart = ChartFactory.createChart(chartData);
         visualizationPanel.updateChart(chart, chartData);
     }

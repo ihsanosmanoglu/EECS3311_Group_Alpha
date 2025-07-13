@@ -22,6 +22,7 @@ public class ChartDTO {
     private Map<String, Double> dataPoints;
     private boolean hasData;
     private String message;
+    private Map<String, Double> nutrientPercentages; // Add this line
 
     public ChartDTO(String title, String xAxisLabel, String yAxisLabel, ChartType chartType) {
         this.title = title;
@@ -30,6 +31,7 @@ public class ChartDTO {
         this.chartType = chartType;
         this.dataPoints = new LinkedHashMap<>(); // maintains insertion order
         this.hasData = true;
+        this.nutrientPercentages = new LinkedHashMap<>(); // Add this line
     }
 
     public void addDataPoint(String key, Double value) {
@@ -70,6 +72,14 @@ public class ChartDTO {
 
     public void setMessage(String message) {
         this.message = message;
+    }
+
+    public Map<String, Double> getNutrientPercentages() {
+        return new LinkedHashMap<>(nutrientPercentages);
+    }
+
+    public void setNutrientPercentages(Map<String, Double> nutrientPercentages) {
+        this.nutrientPercentages = new LinkedHashMap<>(nutrientPercentages);
     }
 
     public static ChartDTO createEmptyChart(String title, ChartType chartType) {

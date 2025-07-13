@@ -20,8 +20,8 @@ public class Visualization implements IVisualizationFacade {
     }
 
     @Override
-    public ChartDTO buildDailyIntakeChart(UUID profileId, LocalDate from, LocalDate to) {
-        return chartsService.createTopNutrientsChart(profileId, from, to);
+    public ChartDTO buildDailyIntakeChart(UUID profileId, LocalDate from, LocalDate to, int topN) {
+        return chartsService.createTopNutrientsChart(profileId, from, to, topN);
     }
 
     @Override
