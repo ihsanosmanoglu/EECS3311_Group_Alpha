@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.lang.reflect.Type;
+import java.util.Map;
 
 /**
  * JdbcMealLogRepo - JDBC implementation of MealLogRepo
@@ -305,7 +306,6 @@ public class JdbcMealLogRepo implements MealLogRepo {
             try {
                 sugar = rs.getDouble("sugar");
             } catch (SQLException e) {
-                // Column does not exist, default to 0.0
                 sugar = 0.0;
             }
             NutrientInfo nutrients = new NutrientInfo(
@@ -316,10 +316,36 @@ public class JdbcMealLogRepo implements MealLogRepo {
                 rs.getDouble("fiber"),
                 sugar
             );
-            return new MealDTO(id, profileId, date, mealType, ingredients, quantities, nutrients);
+            MealDTO meal = new MealDTO(id, profileId, date, mealType, ingredients, quantities, nutrients);
+            // Compute food group servings from ingredients
+            Map<ca.nutrisci.domain.entities.FoodGroup, Double> foodGroupServings = new java.util.EnumMap<>(ca.nutrisci.domain.entities.FoodGroup.class);
+            for (int i = 0; i < ingredients.size(); i++) {
+                String ingredient = ingredients.get(i);
+                double quantity = (i < quantities.size()) ? quantities.get(i) : 1.0;
+                ca.nutrisci.domain.entities.FoodGroup group = classifyIngredientToFoodGroup(ingredient);
+                foodGroupServings.merge(group, quantity, Double::sum);
+            }
+            meal.setFoodGroupServings(foodGroupServings);
+            System.out.println("[DEBUG] Loaded meal " + id + " foodGroupServings: " + foodGroupServings);
+            return meal;
         } catch (Exception e) {
             System.err.println("❌ Error mapping meal from database: " + e.getMessage());
             throw new SQLException("Error deserializing meal data", e);
+        }
+    }
+
+    // Helper method to classify an ingredient to a food group (simple keyword-based)
+    private ca.nutrisci.domain.entities.FoodGroup classifyIngredientToFoodGroup(String ingredient) {
+        if (ingredient == null) return ca.nutrisci.domain.entities.FoodGroup.UNKNOWN;
+        String ing = ingredient.toLowerCase();
+        if (ing.contains("apple") || ing.contains("banana") || ing.contains("carrot") || ing.contains("broccoli") || ing.contains("lettuce") || ing.contains("fruit") || ing.contains("vegetable")) {
+            return ca.nutrisci.domain.entities.FoodGroup.VEGETABLES_AND_FRUITS;
+        } else if (ing.contains("bread") || ing.contains("rice") || ing.contains("pasta") || ing.contains("oat") || ing.contains("grain") || ing.contains("cereal") || ing.contains("quinoa") || ing.contains("barley")) {
+            return ca.nutrisci.domain.entities.FoodGroup.WHOLE_GRAINS;
+        } else if (ing.contains("chicken") || ing.contains("beef") || ing.contains("egg") || ing.contains("fish") || ing.contains("tofu") || ing.contains("bean") || ing.contains("lentil") || ing.contains("nut") || ing.contains("yogurt") || ing.contains("milk") || ing.contains("cheese") || ing.contains("protein")) {
+            return ca.nutrisci.domain.entities.FoodGroup.PROTEIN_FOODS;
+        } else {
+            return ca.nutrisci.domain.entities.FoodGroup.UNKNOWN;
         }
     }
     

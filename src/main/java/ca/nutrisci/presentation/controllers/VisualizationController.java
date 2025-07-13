@@ -37,10 +37,9 @@ public class VisualizationController {
         if (currentProfileId == null) {
             throw new IllegalStateException("No profile selected");
         }
-
         ChartDTO chartData = visualizationFacade.buildDailyIntakeChart(currentProfileId, from, to);
         JFreeChart chart = ChartFactory.createChart(chartData);
-        visualizationPanel.updateChart(chart);
+        visualizationPanel.updateChart(chart, chartData);
     }
 
     public void loadCfgAlignmentChart(LocalDate from, LocalDate to) {
@@ -48,10 +47,14 @@ public class VisualizationController {
         if (currentProfileId == null) {
             throw new IllegalStateException("No profile selected");
         }
-
         GroupedBarChartDTO chartData = visualizationFacade.buildCfgAlignmentChart(currentProfileId, from, to);
+        if (!chartData.hasData() && chartData.getMessage() != null) {
+            // Show message instead of chart
+            visualizationPanel.updateChart(null, chartData);
+            return;
+        }
         JFreeChart chart = ChartFactory.createGroupedBarChart(chartData);
-        visualizationPanel.updateChart(chart);
+        visualizationPanel.updateChart(chart, null);
     }
 
     /**
@@ -68,19 +71,15 @@ public class VisualizationController {
         if (startDate == null || endDate == null || nutrient == null || chartStyle == null || profileId == null) {
             throw new IllegalArgumentException("All parameters must be non-null");
         }
-
         if (startDate.isAfter(endDate)) {
             throw new IllegalArgumentException("Start date cannot be after end date");
         }
-
-        // Get the chart data from the facade
         SwapImpactDTO chartData = visualizationFacade.buildSwapImpactChart(startDate, endDate, nutrient, chartStyle, profileId);
         if (chartData == null) {
             throw new IllegalStateException("Failed to generate swap impact chart data");
         }
-
-        // Create and display the chart
         JFreeChart chart = ChartFactory.createSwapImpactChart(chartData);
-        visualizationPanel.updateChart(chart);
+        // For swap impact, just pass null for ChartDTO (no message support needed)
+        visualizationPanel.updateChart(chart, null);
     }
 } 

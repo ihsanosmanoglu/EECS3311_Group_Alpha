@@ -64,18 +64,27 @@ public class ChartsService {
         // Calculate daily totals for each day in range
         Map<String, Double> totalNutrients = new HashMap<>();
         long daysInRange = ChronoUnit.DAYS.between(from, to) + 1;
+        int nonZeroDays = 0;
 
         for (MealDTO meal : meals) {
             NutrientInfo nutrients = meal.getNutrients();
             if (nutrients != null) {
-                addToTotal(totalNutrients, "Protein", nutrients.getProtein());
-                addToTotal(totalNutrients, "Carbohydrates", nutrients.getCarbs());
-                addToTotal(totalNutrients, "Fat", nutrients.getFat());
-                addToTotal(totalNutrients, "Fiber", nutrients.getFiber());
-                addToTotal(totalNutrients, "Calories", nutrients.getCalories());
+                boolean hasNonZero = false;
+                if (nutrients.getProtein() > 0) { addToTotal(totalNutrients, "Protein", nutrients.getProtein()); hasNonZero = true; }
+                if (nutrients.getCarbs() > 0) { addToTotal(totalNutrients, "Carbohydrates", nutrients.getCarbs()); hasNonZero = true; }
+                if (nutrients.getFat() > 0) { addToTotal(totalNutrients, "Fat", nutrients.getFat()); hasNonZero = true; }
+                if (nutrients.getFiber() > 0) { addToTotal(totalNutrients, "Fiber", nutrients.getFiber()); hasNonZero = true; }
+                if (nutrients.getSugar() > 0) { addToTotal(totalNutrients, "Sugar", nutrients.getSugar()); hasNonZero = true; }
+                if (hasNonZero) nonZeroDays++;
             }
         }
-        System.out.println("[DEBUG] Nutrient data: " + totalNutrients);
+
+        if (nonZeroDays == 0) {
+            ChartDTO empty = new ChartDTO("Daily Nutrient Intake", "Nutrient", "Amount (daily average)", ChartDTO.ChartType.PIE);
+            empty.setHasData(false);
+            empty.setMessage("No data available for the selected date range");
+            return empty;
+        }
 
         // Calculate daily averages
         totalNutrients.replaceAll((k, v) -> v / daysInRange);
@@ -105,7 +114,7 @@ public class ChartsService {
             ChartDTO.ChartType.PIE
         );
 
-        // Add data points
+        // Add data points (no Calories)
         sortedNutrients.forEach(chart::addDataPoint);
         if (otherTotal > 0) {
             chart.addDataPoint("Other", otherTotal);
@@ -121,63 +130,49 @@ public class ChartsService {
      */
     public GroupedBarChartDTO createCfgAlignmentChart(UUID profileId, LocalDate from, LocalDate to) {
         System.out.println("[DEBUG] createCfgAlignmentChart called with profileId=" + profileId + ", from=" + from + ", to=" + to);
-        if (profileId == null || from == null || to == null) {
-            return GroupedBarChartDTO.createEmptyChart("Canada's Food Guide Alignment");
-        }
-
-        // Check cache first
         String chartKey = "cfg_alignment_" + from + "_" + to;
+        System.out.println("[DEBUG] CFG Alignment chartKey: " + chartKey);
         GroupedBarChartDTO cachedChart = chartCache.getCachedGroupedChart(profileId, chartKey);
         if (cachedChart != null) {
+            System.out.println("[DEBUG] Returning cached CFG Alignment chart for key: " + chartKey);
             return cachedChart;
         }
-
-        // Get meals in date range
         List<MealDTO> meals = mealLogRepo.getMealsByDateRange(profileId, from, to);
         System.out.println("[DEBUG] Meals found: " + meals.size());
         if (meals.isEmpty()) {
             System.out.println("[DEBUG] No meals found for this range.");
-            return GroupedBarChartDTO.createEmptyChart("Canada's Food Guide Alignment");
+            GroupedBarChartDTO empty = GroupedBarChartDTO.createEmptyChart("Canada's Food Guide Alignment");
+            empty.setHasData(false);
+            try { empty.getClass().getMethod("setMessage", String.class); empty.setMessage("No data available for the selected date range. Please log meals or try a different range."); } catch (Exception e) { }
+            return empty;
         }
-
-        // Calculate daily totals for each food group
         Map<FoodGroup, Double> dailyTotals = new EnumMap<>(FoodGroup.class);
         long daysInRange = ChronoUnit.DAYS.between(from, to) + 1;
-
         for (MealDTO meal : meals) {
             for (Map.Entry<FoodGroup, Double> entry : meal.getFoodGroupServings().entrySet()) {
                 dailyTotals.merge(entry.getKey(), entry.getValue(), Double::sum);
             }
         }
-        System.out.println("[DEBUG] Daily totals: " + dailyTotals);
-
-        // Calculate daily averages
         dailyTotals.replaceAll((k, v) -> v / daysInRange);
-
-        // Create chart with CFG recommendations
         GroupedBarChartDTO chart = new GroupedBarChartDTO(
             "Canada's Food Guide Alignment",
             "Food Group",
             "Daily Servings"
         );
-
-        // CFG recommendations (these could be adjusted based on age/gender)
         Map<FoodGroup, Double> recommendations = Map.of(
-            FoodGroup.VEGETABLES_AND_FRUITS, 8.0,  // 7-10 servings
-            FoodGroup.WHOLE_GRAINS, 6.0,          // 6-8 servings
-            FoodGroup.PROTEIN_FOODS, 2.0          // 2-3 servings
+            FoodGroup.VEGETABLES_AND_FRUITS, 8.0,
+            FoodGroup.WHOLE_GRAINS, 6.0,
+            FoodGroup.PROTEIN_FOODS, 2.0
         );
-
-        // Add data for each food group
         for (FoodGroup group : FoodGroup.values()) {
             if (group != FoodGroup.UNKNOWN) {
                 double actual = dailyTotals.getOrDefault(group, 0.0);
                 double recommended = recommendations.getOrDefault(group, 0.0);
+                System.out.println("[DEBUG] FoodGroup: " + group + ", Actual: " + actual + ", Recommended: " + recommended);
                 chart.addCategory(group.getDisplayName(), actual, recommended);
             }
         }
-
-        // Cache the chart
+        System.out.println("[DEBUG] Caching CFG Alignment chart for key: " + chartKey);
         chartCache.cacheGroupedChart(profileId, chartKey, chart);
         return chart;
     }

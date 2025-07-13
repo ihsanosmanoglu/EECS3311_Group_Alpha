@@ -21,6 +21,7 @@ public class ChartDTO {
     private ChartType chartType;
     private Map<String, Double> dataPoints;
     private boolean hasData;
+    private String message;
 
     public ChartDTO(String title, String xAxisLabel, String yAxisLabel, ChartType chartType) {
         this.title = title;
@@ -61,6 +62,14 @@ public class ChartDTO {
 
     public void setHasData(boolean hasData) {
         this.hasData = hasData;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public static ChartDTO createEmptyChart(String title, ChartType chartType) {

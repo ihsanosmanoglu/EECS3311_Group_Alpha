@@ -23,7 +23,7 @@ public class NutrientViewController {
     public void showDailyIntakeChart(UUID profileId, LocalDate from, LocalDate to) {
         ChartDTO chartData = visualizationFacade.buildDailyIntakeChart(profileId, from, to);
         var chart = ChartFactory.createChart(chartData);
-        visualizationPanel.updateChart(chart);
+        visualizationPanel.updateChart(chart, chartData);
     }
 
     public void showCfgAlignmentChart(UUID profileId, LocalDate from, LocalDate to) {
@@ -46,6 +46,6 @@ public class NutrientViewController {
         }
 
         var chart = ChartFactory.createChart(chartData);
-        visualizationPanel.updateChart(chart);
+        visualizationPanel.updateChart(chart, null);
     }
 } 

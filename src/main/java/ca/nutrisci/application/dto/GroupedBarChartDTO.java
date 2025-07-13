@@ -18,6 +18,7 @@ public class GroupedBarChartDTO {
     private Map<String, Double> actuals;
     private Map<String, Double> recommendations;
     private boolean hasData;
+    private String message;
 
     public GroupedBarChartDTO(String title, String xAxisLabel, String yAxisLabel) {
         this.title = title;
@@ -70,6 +71,14 @@ public class GroupedBarChartDTO {
 
     public void setHasData(boolean hasData) {
         this.hasData = hasData;
+    }
+
+    public String getMessage() {
+        return message;
+    }
+
+    public void setMessage(String message) {
+        this.message = message;
     }
 
     public static GroupedBarChartDTO createEmptyChart(String title) {

@@ -26,6 +26,7 @@ public class VisualizationPanel extends JPanel {
     private JPanel nutrientPanel;
     private JPanel chartStylePanel;
     private VisualizationController controller;
+    private JPanel feedbackPanel = new JPanel();
 
     // Chart type options
     private static final String TOP_NUTRIENTS = "Top Nutrients";
@@ -122,6 +123,7 @@ public class VisualizationPanel extends JPanel {
         // Add components to main panel
         add(controlPanel, BorderLayout.NORTH);
         add(chartContainer, BorderLayout.CENTER);
+        add(feedbackPanel, BorderLayout.SOUTH);
         
         // Add placeholder initially
         chartContainer.add(placeholderLabel, BorderLayout.CENTER);
@@ -139,7 +141,6 @@ public class VisualizationPanel extends JPanel {
         if (controller == null) {
             return;
         }
-
         // Convert dates to LocalDate
         LocalDate startDate = startDateChooser.getDate().toInstant()
                 .atZone(ZoneId.systemDefault())
@@ -147,7 +148,9 @@ public class VisualizationPanel extends JPanel {
         LocalDate endDate = endDateChooser.getDate().toInstant()
                 .atZone(ZoneId.systemDefault())
                 .toLocalDate();
-
+        String selectedType = (String) chartTypeCombo.getSelectedItem();
+        UUID profileId = controller.getCurrentProfileId();
+        System.out.println("[DEBUG] generateChart: startDate=" + startDate + ", endDate=" + endDate + ", chartType=" + selectedType + ", profileId=" + profileId);
         // Validate date range
         if (startDate.isAfter(endDate)) {
             JOptionPane.showMessageDialog(this,
@@ -156,10 +159,6 @@ public class VisualizationPanel extends JPanel {
                     JOptionPane.ERROR_MESSAGE);
             return;
         }
-
-        String selectedType = (String) chartTypeCombo.getSelectedItem();
-        UUID profileId = controller.getCurrentProfileId();
-
         switch (selectedType) {
             case TOP_NUTRIENTS:
                 controller.loadDailyIntakeChart(startDate, endDate);
@@ -179,20 +178,75 @@ public class VisualizationPanel extends JPanel {
         this.controller = controller;
     }
 
-    public void updateChart(JFreeChart chart) {
+    public void updateChart(JFreeChart chart, Object chartDTO) {
         chartContainer.removeAll();
-        
-        if (chart != null) {
+        feedbackPanel.removeAll();
+
+        boolean showMessage = false;
+        String message = null;
+        if (chartDTO != null) {
+            try {
+                boolean hasData = (boolean) chartDTO.getClass().getMethod("hasData").invoke(chartDTO);
+                Object msgObj = chartDTO.getClass().getMethod("getMessage").invoke(chartDTO);
+                if (!hasData && msgObj != null) {
+                    message = msgObj.toString();
+                    showMessage = true;
+                }
+            } catch (Exception e) {
+                // ignore
+            }
+        }
+
+        if (chart != null && !showMessage) {
             ChartPanel chartPanel = new ChartPanel(chart);
             chartPanel.setPreferredSize(new Dimension(600, 400));
             chartPanel.setMouseWheelEnabled(true);
             chartPanel.setMouseZoomable(true);
             chartContainer.add(chartPanel, BorderLayout.CENTER);
+            // Contextual feedback for CFG Alignment chart
+            if (chartDTO != null && chartDTO.getClass().getSimpleName().equals("GroupedBarChartDTO")) {
+                try {
+                    java.util.List<String> categories = (java.util.List<String>) chartDTO.getClass().getMethod("getCategories").invoke(chartDTO);
+                    java.util.Map<String, Double> actuals = (java.util.Map<String, Double>) chartDTO.getClass().getMethod("getActuals").invoke(chartDTO);
+                    java.util.Map<String, Double> recommendations = (java.util.Map<String, Double>) chartDTO.getClass().getMethod("getRecommendations").invoke(chartDTO);
+                    boolean anyWithin50 = false;
+                    int within10 = 0;
+                    JPanel feedbackList = new JPanel();
+                    feedbackList.setLayout(new BoxLayout(feedbackList, BoxLayout.Y_AXIS));
+                    for (String group : categories) {
+                        double actual = actuals.getOrDefault(group, 0.0);
+                        double rec = recommendations.getOrDefault(group, 0.0);
+                        String icon = "";
+                        double percent = rec > 0 ? (actual / rec) * 100 : 0;
+                        if (rec > 0 && Math.abs(percent - 100) <= 10) { icon = "✅"; within10++; anyWithin50 = true; }
+                        else if (rec > 0 && percent < 70) { icon = "⚠️"; }
+                        else if (rec > 0 && percent > 300) { icon = "❌"; }
+                        else if (rec > 0 && Math.abs(percent - 100) <= 50) { anyWithin50 = true; }
+                        String label = String.format("%s %s: %.0f%% of recommended", icon, group, percent);
+                        JLabel feedbackLabel = new JLabel(label);
+                        feedbackList.add(feedbackLabel);
+                    }
+                    feedbackPanel.add(feedbackList);
+                    if (!anyWithin50) {
+                        JLabel warn = new JLabel("Your current intake is far from CFG recommendations. Consider adjusting your meals.");
+                        warn.setForeground(java.awt.Color.RED);
+                        feedbackPanel.add(warn);
+                    }
+                } catch (Exception e) {
+                    // ignore
+                }
+            }
+        } else if (showMessage && message != null) {
+            JLabel messageLabel = new JLabel(message, SwingConstants.CENTER);
+            messageLabel.setFont(new Font("Arial", Font.BOLD, 16));
+            chartContainer.add(messageLabel, BorderLayout.CENTER);
         } else {
             chartContainer.add(placeholderLabel, BorderLayout.CENTER);
         }
-        
+
         chartContainer.revalidate();
         chartContainer.repaint();
+        feedbackPanel.revalidate();
+        feedbackPanel.repaint();
     }
 } 
