@@ -110,6 +110,12 @@ public class DatabaseManager {
      * Create tables - simplified approach
      */
     private void createTables() {
+        // Force manual table creation for now to ensure tables are created
+        System.out.println("📄 Creating tables manually (forced)");
+        createTablesManually();
+        return;
+        
+        /*
         try (InputStream schemaStream = getClass().getClassLoader().getResourceAsStream("database/schema.sql")) {
             if (schemaStream == null) {
                 System.out.println("📄 Creating tables manually");
@@ -145,6 +151,7 @@ public class DatabaseManager {
             System.err.println("❌ Schema error: " + e.getMessage());
             createTablesManually();
         }
+        */
     }
     
     /**

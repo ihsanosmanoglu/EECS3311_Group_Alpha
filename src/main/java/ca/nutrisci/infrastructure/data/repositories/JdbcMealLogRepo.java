@@ -46,7 +46,7 @@ public class JdbcMealLogRepo implements MealLogRepo {
             stmt.setString(2, meal.getProfileId().toString());
             stmt.setDate(3, Date.valueOf(meal.getDate()));
             stmt.setString(4, meal.getMealType());
-            stmt.setString(5, gson.toJson(meal.getIngredients()));
+            stmt.setString(5, gson.toJson(meal.getIngredientNames()));
             stmt.setString(6, gson.toJson(meal.getQuantities()));
             
             NutrientInfo nutrients = meal.getNutrients();
@@ -69,7 +69,7 @@ public class JdbcMealLogRepo implements MealLogRepo {
             if (rows > 0) {
                 System.out.println("✅ Meal saved to database: " + meal.getMealType() + " (" + id + ")");
                 return new MealDTO(id, meal.getProfileId(), meal.getDate(), meal.getMealType(),
-                                 meal.getIngredients(), meal.getQuantities(), meal.getNutrients());
+                                 meal.getIngredientNames(), meal.getQuantities(), meal.getNutrients());
             } else {
                 throw new RuntimeException("Failed to save meal to database");
             }
@@ -87,7 +87,7 @@ public class JdbcMealLogRepo implements MealLogRepo {
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             stmt.setString(1, updatedMeal.getMealType());
-            stmt.setString(2, gson.toJson(updatedMeal.getIngredients()));
+            stmt.setString(2, gson.toJson(updatedMeal.getIngredientNames()));
             stmt.setString(3, gson.toJson(updatedMeal.getQuantities()));
             
             NutrientInfo nutrients = updatedMeal.getNutrients();
@@ -112,7 +112,7 @@ public class JdbcMealLogRepo implements MealLogRepo {
             if (rows > 0) {
                 System.out.println("✅ Meal updated in database: " + mealId);
                 return new MealDTO(mealId, updatedMeal.getProfileId(), updatedMeal.getDate(),
-                                 updatedMeal.getMealType(), updatedMeal.getIngredients(),
+                                 updatedMeal.getMealType(), updatedMeal.getIngredientNames(),
                                  updatedMeal.getQuantities(), updatedMeal.getNutrients());
             } else {
                 throw new RuntimeException("Meal not found for update: " + mealId);

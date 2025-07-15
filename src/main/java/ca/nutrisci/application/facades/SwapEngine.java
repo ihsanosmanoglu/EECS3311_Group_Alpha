@@ -45,7 +45,7 @@ public class SwapEngine implements ISwapFacade {
         ArrayList<SwapDTO> allSwaps = new ArrayList<>();
         
         System.out.println("🎯 Processing " + goals.size() + " nutrition goals for meal: " + selectedMeal.getMealType());
-        System.out.println("🍽️ Meal ingredients: " + selectedMeal.getIngredients());
+        System.out.println("🍽️ Meal ingredients: " + selectedMeal.getIngredientNames());
         
         for (SwapGoalDTO goal : goals) {
             try {
@@ -221,7 +221,7 @@ public class SwapEngine implements ISwapFacade {
     
     private MealDTO applySwapToMeal(MealDTO originalMeal, SwapDTO swap) {
         // Create a copy of the meal
-        List<String> newIngredients = new ArrayList<>(originalMeal.getIngredients());
+        List<String> newIngredients = new ArrayList<>(originalMeal.getIngredientNames());
         List<Double> newQuantities = new ArrayList<>(originalMeal.getQuantities());
         
         // Find and replace the ingredient

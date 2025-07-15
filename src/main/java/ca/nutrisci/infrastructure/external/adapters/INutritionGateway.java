@@ -37,6 +37,26 @@ public interface INutritionGateway {
      */
     java.util.List<String> getAllIngredients();
     
+    /**
+     * Get the food ID for a specific ingredient name
+     * @param foodName The name of the food
+     * @return The food ID, or -1 if not found
+     */
+    int getFoodId(String foodName);
+    
+    /**
+     * Get all food groups
+     * @return List of all food group names
+     */
+    List<String> getAllFoodGroups();
+    
+    /**
+     * Get ingredients by food group
+     * @param groupName The name of the food group
+     * @return List of ingredients in the specified group
+     */
+    List<String> getIngredientsByGroup(String groupName);
+    
     // Batch lookup for multiple ingredients
     List<NutrientInfo> lookupMultipleIngredients(List<String> ingredientNames);
     

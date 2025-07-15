@@ -255,7 +255,7 @@ public class FileMealLogRepo implements MealLogRepo {
     
     private String formatMealToCSV(MealDTO meal) {
         // Simplified CSV format - use pipe delimiters for lists (KISS principle)
-        String ingredientsStr = String.join("|", meal.getIngredients());
+                    String ingredientsStr = String.join("|", meal.getIngredientNames());
         String quantitiesStr = meal.getQuantities().stream()
             .map(String::valueOf)
             .collect(Collectors.joining("|"));

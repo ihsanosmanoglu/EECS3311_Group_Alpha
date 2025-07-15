@@ -1,9 +1,12 @@
 package ca.nutrisci.presentation.ui.meallog;
 
+import ca.nutrisci.application.dto.IngredientDTO;
 import ca.nutrisci.application.dto.MealDTO;
+import ca.nutrisci.application.services.UnitConversionService;
 import ca.nutrisci.infrastructure.external.adapters.INutritionGateway;
 
 import javax.swing.*;
+import javax.swing.border.TitledBorder;
 import java.awt.*;
 import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
@@ -15,45 +18,58 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * IngredientSelectionDialog - Component for ingredient selection in meal creation/editing
+ * IngredientSelectionDialog - Advanced ingredient selection with individual quantities and units
  * 
  * PURPOSE:
  * - Provides comprehensive ingredient selection interface with 5,700+ CNF foods
- * - Handles both new meal creation and existing meal editing
- * - Integrates with nutrition gateway for food lookup
- * - Supports search, filtering, and easy ingredient selection
- * 
- * DESIGN DECISIONS FOLLOWED:
- * - DD-1: Three-Tier Layered - Uses nutrition gateway for food data
- * - DD-9: Naming Conventions - IngredientSelectionDialog follows naming pattern
- * - Single Responsibility: Handles only ingredient selection UI
+ * - Supports individual quantity and unit for each ingredient
+ * - Double-click editing for easy quantity/unit modification
+ * - Integrates with UnitConversionService for proper unit handling
  * 
  * FEATURES:
- * - Search across 5,700+ Canadian Nutrient File foods
+ * - Search across Canadian Nutrient File foods
  * - Food group filtering for easy browsing
- * - Double-click to add/remove ingredients
- * - Quantity specification for all selected foods
- * - Pre-population for editing existing meals
+ * - Individual ingredient quantity and unit management
+ * - Double-click to edit ingredient quantity/unit
+ * - Unit conversion support from CNF database
  * 
  * @author NutriSci Development Team
- * @version 2.0
+ * @version 3.0 (Refactored for individual ingredient units)
  * @since 1.0
  */
 public class IngredientSelectionDialog extends JDialog {
+    
+    // Inner class to hold ingredient information with quantity and unit
+    private static class EditableIngredientInfo {
+        String name;
+        double quantity;
+        String unit;
+
+        EditableIngredientInfo(String name, double quantity, String unit) {
+            this.name = name;
+            this.quantity = quantity;
+            this.unit = unit;
+        }
+
+        @Override
+        public String toString() {
+            return String.format("%s (%.1f %s)", name, quantity, unit);
+        }
+    }
     
     // Dialog components
     private JTextField searchField;
     private JComboBox<String> foodGroupCombo;
     private JList<String> availableList;
     private DefaultListModel<String> availableModel;
-    private JList<String> selectedList;
-    private DefaultListModel<String> selectedModel;
-    private JTextField quantityField;
+    private JList<EditableIngredientInfo> selectedList;
+    private DefaultListModel<EditableIngredientInfo> selectedModel;
     private JButton createMealButton;
     private JButton cancelButton;
     
     // Core dependencies
     private final INutritionGateway nutritionGateway;
+    private final UnitConversionService unitConversionService;
     
     // Dialog state
     private final String mealType;
@@ -63,11 +79,6 @@ public class IngredientSelectionDialog extends JDialog {
     
     /**
      * Constructor - Creates ingredient selection dialog
-     * 
-     * @param parent Parent frame
-     * @param mealType Type of meal (breakfast, lunch, dinner, snack)
-     * @param existingMeal Existing meal if editing, null if creating new
-     * @param nutritionGateway Gateway for nutrition data access
      */
     public IngredientSelectionDialog(Frame parent, String mealType, MealDTO existingMeal, 
                                    INutritionGateway nutritionGateway) {
@@ -76,6 +87,14 @@ public class IngredientSelectionDialog extends JDialog {
         this.mealType = mealType;
         this.existingMeal = existingMeal;
         this.nutritionGateway = nutritionGateway;
+        this.unitConversionService = UnitConversionService.getInstance();
+        
+        // Initialize unit conversion service
+        try {
+            unitConversionService.initialize();
+        } catch (Exception e) {
+            System.err.println("Warning: Could not initialize UnitConversionService: " + e.getMessage());
+        }
         
         initializeComponents();
         layoutComponents();
@@ -83,7 +102,7 @@ public class IngredientSelectionDialog extends JDialog {
         attachEventListeners();
         
         // Configure dialog
-        setSize(800, 600);
+        setSize(900, 700);
         setLocationRelativeTo(parent);
         setDefaultCloseOperation(DISPOSE_ON_CLOSE);
     }
@@ -107,42 +126,53 @@ public class IngredientSelectionDialog extends JDialog {
         searchField = new JTextField();
         searchField.setPreferredSize(new Dimension(200, 25));
         
-        // Food group filter
+        // Food group filter - load from nutrition gateway if available
         foodGroupCombo = new JComboBox<>();
         foodGroupCombo.addItem("All Foods");
-        foodGroupCombo.addItem("Dairy and Egg Products");
-        foodGroupCombo.addItem("Poultry Products");
-        foodGroupCombo.addItem("Vegetables and Vegetable Products");
-        foodGroupCombo.addItem("Fruits and fruit juices");
-        foodGroupCombo.addItem("Beef Products");
-        foodGroupCombo.addItem("Pork Products");
-        foodGroupCombo.addItem("Finfish and Shellfish Products");
-        foodGroupCombo.addItem("Cereals, Grains and Pasta");
-        foodGroupCombo.addItem("Baked Products");
-        foodGroupCombo.addItem("Nuts and Seeds");
-        foodGroupCombo.addItem("Legumes and Legume Products");
-        foodGroupCombo.addItem("Spices and Herbs");
-        foodGroupCombo.addItem("Fats and Oils");
-        foodGroupCombo.addItem("Beverages");
-        foodGroupCombo.addItem("Sweets");
+        
+        // Try to load real food groups from nutrition gateway
+        try {
+            if (nutritionGateway != null) {
+                List<String> foodGroups = nutritionGateway.getAllFoodGroups();
+                for (String group : foodGroups) {
+                    foodGroupCombo.addItem(group);
+                }
+            }
+        } catch (Exception e) {
+            // Fall back to predefined groups
+            addDefaultFoodGroups();
+        }
+        
+        if (foodGroupCombo.getItemCount() == 1) {
+            addDefaultFoodGroups();
+        }
         
         // Available ingredients list
         availableModel = new DefaultListModel<>();
         availableList = new JList<>(availableModel);
         availableList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         
-        // Selected ingredients list
+        // Selected ingredients list with custom model
         selectedModel = new DefaultListModel<>();
         selectedList = new JList<>(selectedModel);
-        selectedList.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+        selectedList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
         
-        // Quantity field
-        String defaultQuantity = "100";
-        if (existingMeal != null && existingMeal.getQuantities() != null && !existingMeal.getQuantities().isEmpty()) {
-            defaultQuantity = String.valueOf(existingMeal.getQuantities().get(0).intValue());
-        }
-        quantityField = new JTextField(defaultQuantity);
-        quantityField.setPreferredSize(new Dimension(80, 25));
+        // Use custom cell renderer for better display
+        selectedList.setCellRenderer(new DefaultListCellRenderer() {
+            @Override
+            public Component getListCellRendererComponent(JList<?> list, Object value, 
+                    int index, boolean isSelected, boolean cellHasFocus) {
+                super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
+                
+                if (value instanceof EditableIngredientInfo) {
+                    EditableIngredientInfo info = (EditableIngredientInfo) value;
+                    setText(String.format("<html><b>%s</b><br/><small>%.1f %s</small></html>", 
+                           info.name, info.quantity, info.unit));
+                }
+                
+                return this;
+            }
+        });
         
         // Action buttons
         String buttonText = existingMeal != null ? "✓ Update " + mealType.toUpperCase() + " Meal" : 
@@ -162,6 +192,22 @@ public class IngredientSelectionDialog extends JDialog {
         cancelButton.setForeground(Color.WHITE);
         cancelButton.setFocusPainted(false);
         cancelButton.setBorder(BorderFactory.createEtchedBorder());
+    }
+    
+    /**
+     * Add default food groups as fallback
+     */
+    private void addDefaultFoodGroups() {
+        String[] defaultGroups = {
+            "Dairy and Egg Products", "Poultry Products", "Vegetables and Vegetable Products",
+            "Fruits and fruit juices", "Beef Products", "Pork Products", "Finfish and Shellfish Products",
+            "Cereals, Grains and Pasta", "Baked Products", "Nuts and Seeds", "Legumes and Legume Products",
+            "Spices and Herbs", "Fats and Oils", "Beverages", "Sweets"
+        };
+        
+        for (String group : defaultGroups) {
+            foodGroupCombo.addItem(group);
+        }
     }
     
     /**
@@ -200,6 +246,11 @@ public class IngredientSelectionDialog extends JDialog {
         searchPanel.add(new JLabel("Search:"), BorderLayout.WEST);
         searchPanel.add(searchField, BorderLayout.CENTER);
         
+        // Add instruction label
+        JLabel instructionLabel = new JLabel("<html><small>💡 Double-click items to add/edit quantities and units</small></html>");
+        instructionLabel.setForeground(new Color(100, 100, 100));
+        searchPanel.add(instructionLabel, BorderLayout.SOUTH);
+        
         // Food group filter
         JPanel groupPanel = new JPanel(new BorderLayout(5, 5));
         groupPanel.setBorder(BorderFactory.createTitledBorder("Filter by Food Group"));
@@ -219,9 +270,10 @@ public class IngredientSelectionDialog extends JDialog {
         
         // Left panel - Available ingredients
         JPanel leftPanel = new JPanel(new BorderLayout(5, 5));
-        leftPanel.setBorder(BorderFactory.createTitledBorder("Available Foods"));
+        TitledBorder leftBorder = BorderFactory.createTitledBorder("Available Foods (Double-click to add)");
+        leftPanel.setBorder(leftBorder);
         JScrollPane availableScroll = new JScrollPane(availableList);
-        availableScroll.setPreferredSize(new Dimension(280, 250));
+        availableScroll.setPreferredSize(new Dimension(320, 300));
         leftPanel.add(availableScroll, BorderLayout.CENTER);
         
         // Middle panel - Transfer buttons
@@ -229,14 +281,15 @@ public class IngredientSelectionDialog extends JDialog {
         
         // Right panel - Selected ingredients
         JPanel rightPanel = new JPanel(new BorderLayout(5, 5));
-        rightPanel.setBorder(BorderFactory.createTitledBorder("Selected Foods"));
+        TitledBorder rightBorder = BorderFactory.createTitledBorder("Selected Ingredients (Double-click to edit)");
+        rightPanel.setBorder(rightBorder);
         JScrollPane selectedScroll = new JScrollPane(selectedList);
-        selectedScroll.setPreferredSize(new Dimension(280, 250));
+        selectedScroll.setPreferredSize(new Dimension(320, 300));
         rightPanel.add(selectedScroll, BorderLayout.CENTER);
         
-        // Quantity panel
-        JPanel quantityPanel = createQuantityPanel();
-        rightPanel.add(quantityPanel, BorderLayout.SOUTH);
+        // Info panel
+        JPanel infoPanel = createInfoPanel();
+        rightPanel.add(infoPanel, BorderLayout.SOUTH);
         
         selectionPanel.add(leftPanel, BorderLayout.WEST);
         selectionPanel.add(middlePanel, BorderLayout.CENTER);
@@ -250,7 +303,7 @@ public class IngredientSelectionDialog extends JDialog {
      */
     private JPanel createTransferButtonPanel() {
         JPanel middlePanel = new JPanel(new GridBagLayout());
-        middlePanel.setPreferredSize(new Dimension(120, 250));
+        middlePanel.setPreferredSize(new Dimension(140, 300));
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.insets = new Insets(10, 10, 10, 10);
         
@@ -262,13 +315,18 @@ public class IngredientSelectionDialog extends JDialog {
         gbc.gridx = 0; gbc.gridy = 1;
         middlePanel.add(removeButton, gbc);
         
-        JButton clearButton = createTransferButton("Clear All", new Color(255, 152, 0));
+        JButton editButton = createTransferButton("✏️ Edit", new Color(33, 150, 243));
         gbc.gridx = 0; gbc.gridy = 2;
+        middlePanel.add(editButton, gbc);
+        
+        JButton clearButton = createTransferButton("Clear All", new Color(255, 152, 0));
+        gbc.gridx = 0; gbc.gridy = 3;
         middlePanel.add(clearButton, gbc);
         
         // Add button functionality
-        addButton.addActionListener(e -> addSelectedIngredients());
+        addButton.addActionListener(e -> addSelectedIngredientsWithDialog());
         removeButton.addActionListener(e -> removeSelectedIngredients());
+        editButton.addActionListener(e -> editSelectedIngredient());
         clearButton.addActionListener(e -> selectedModel.clear());
         
         return middlePanel;
@@ -279,7 +337,7 @@ public class IngredientSelectionDialog extends JDialog {
      */
     private JButton createTransferButton(String text, Color backgroundColor) {
         JButton button = new JButton(text);
-        button.setPreferredSize(new Dimension(100, 35));
+        button.setPreferredSize(new Dimension(120, 40));
         button.setFont(new Font("Arial", Font.BOLD, 12));
         button.setBackground(backgroundColor);
         button.setForeground(Color.WHITE);
@@ -290,18 +348,25 @@ public class IngredientSelectionDialog extends JDialog {
     }
     
     /**
-     * Create quantity input panel
+     * Create info panel with instructions
      */
-    private JPanel createQuantityPanel() {
-        JPanel quantityPanel = new JPanel(new GridLayout(3, 2, 5, 5));
-        quantityPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
-        quantityPanel.add(new JLabel("Quantity (grams):"));
-        quantityPanel.add(quantityField);
-        quantityPanel.add(new JLabel("Same quantity for all"));
-        quantityPanel.add(new JLabel("selected foods"));
-        quantityPanel.add(new JLabel("Tip: Double-click to add"));
-        quantityPanel.add(new JLabel("foods quickly"));
-        return quantityPanel;
+    private JPanel createInfoPanel() {
+        JPanel infoPanel = new JPanel(new GridLayout(3, 1, 5, 5));
+        infoPanel.setBorder(BorderFactory.createEmptyBorder(10, 0, 0, 0));
+        
+        JLabel info1 = new JLabel("<html><small>💡 Each ingredient has its own quantity & unit</small></html>");
+        JLabel info2 = new JLabel("<html><small>🔧 Double-click to edit quantity/unit</small></html>");
+        JLabel info3 = new JLabel("<html><small>📏 Units loaded from CNF database</small></html>");
+        
+        info1.setForeground(new Color(100, 100, 100));
+        info2.setForeground(new Color(100, 100, 100));
+        info3.setForeground(new Color(100, 100, 100));
+        
+        infoPanel.add(info1);
+        infoPanel.add(info2);
+        infoPanel.add(info3);
+        
+        return infoPanel;
     }
     
     /**
@@ -319,17 +384,45 @@ public class IngredientSelectionDialog extends JDialog {
      * Populate initial data
      */
     private void populateInitialData() {
-        // Load common ingredients for the meal type
-        String[] commonIngredients = getCommonIngredients(mealType);
-        for (String ingredient : commonIngredients) {
-            availableModel.addElement(ingredient);
+        // Load all ingredients from nutrition gateway if available
+        try {
+            if (nutritionGateway != null) {
+                List<String> allIngredients = nutritionGateway.getAllIngredients();
+                for (String ingredient : allIngredients) {
+                    availableModel.addElement(ingredient);
+                }
+                System.out.println("✅ Loaded " + allIngredients.size() + " ingredients from CNF database");
+            }
+        } catch (Exception e) {
+            System.err.println("Could not load ingredients from nutrition gateway: " + e.getMessage());
+            // Fall back to common ingredients
+            loadCommonIngredients();
+        }
+        
+        if (availableModel.isEmpty()) {
+            loadCommonIngredients();
         }
         
         // Pre-populate with existing meal ingredients if editing
         if (existingMeal != null && existingMeal.getIngredients() != null) {
-            for (String ingredient : existingMeal.getIngredients()) {
-                selectedModel.addElement(ingredient);
+            for (IngredientDTO ingredient : existingMeal.getIngredients()) {
+                EditableIngredientInfo info = new EditableIngredientInfo(
+                    ingredient.getName(), 
+                    ingredient.getQuantity(), 
+                    ingredient.getUnit()
+                );
+                selectedModel.addElement(info);
             }
+        }
+    }
+    
+    /**
+     * Load common ingredients as fallback
+     */
+    private void loadCommonIngredients() {
+        String[] commonIngredients = getCommonIngredients(mealType);
+        for (String ingredient : commonIngredients) {
+            availableModel.addElement(ingredient);
         }
     }
     
@@ -347,22 +440,22 @@ public class IngredientSelectionDialog extends JDialog {
         
         foodGroupCombo.addActionListener(e -> updateIngredientList());
         
-        // Double-click to add ingredients
+        // Double-click to add ingredients with quantity/unit dialog
         availableList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
-                    addSelectedIngredients();
+                    addSelectedIngredientsWithDialog();
                 }
             }
         });
         
-        // Double-click to remove ingredients
+        // Double-click to edit ingredient quantity/unit
         selectedList.addMouseListener(new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
-                    removeSelectedIngredients();
+                    editSelectedIngredient();
                 }
             }
         });
@@ -380,57 +473,229 @@ public class IngredientSelectionDialog extends JDialog {
         String selectedGroup = (String) foodGroupCombo.getSelectedItem();
         availableModel.clear();
         
-        // Use the meal type's common ingredients if no search or specific group
-        if (searchText.isEmpty() && "All Foods".equals(selectedGroup)) {
-            String[] commonIngredients = getCommonIngredients(mealType);
-            for (String ingredient : commonIngredients) {
-                availableModel.addElement(ingredient);
-            }
-            return;
-        }
-        
-        // Get ingredients based on search/filter
         try {
-            if (!searchText.isEmpty()) {
-                addSearchResults(availableModel, searchText);
-            } else if (!"All Foods".equals(selectedGroup)) {
-                addFoodGroupItems(availableModel, selectedGroup);
-            } else {
-                addPopularFoods(availableModel);
-            }
-        } catch (Exception e) {
-            // Fallback to common ingredients
-            String[] commonIngredients = getCommonIngredients(mealType);
-            for (String ingredient : commonIngredients) {
-                if (searchText.isEmpty() || ingredient.toLowerCase().contains(searchText)) {
+            if (nutritionGateway != null) {
+                List<String> ingredients;
+                
+                if (!searchText.isEmpty()) {
+                    // Search functionality
+                    ingredients = nutritionGateway.searchIngredients(searchText);
+                } else if (!"All Foods".equals(selectedGroup)) {
+                    // Group filtering
+                    ingredients = nutritionGateway.getIngredientsByGroup(selectedGroup);
+                } else {
+                    // Show all ingredients (limited for performance)
+                    ingredients = nutritionGateway.getAllIngredients();
+                    if (ingredients.size() > 100) {
+                        ingredients = ingredients.subList(0, 100);
+                    }
+                }
+                
+                for (String ingredient : ingredients) {
                     availableModel.addElement(ingredient);
                 }
+                
+                return;
+            }
+        } catch (Exception e) {
+            System.err.println("Error updating ingredient list: " + e.getMessage());
+        }
+        
+        // Fallback to local search
+        updateIngredientListFallback(searchText, selectedGroup);
+    }
+    
+    /**
+     * Fallback method for updating ingredient list
+     */
+    private void updateIngredientListFallback(String searchText, String selectedGroup) {
+        String[] ingredients = getCommonIngredients(mealType);
+        
+        for (String ingredient : ingredients) {
+            boolean matchesSearch = searchText.isEmpty() || ingredient.toLowerCase().contains(searchText);
+            boolean matchesGroup = "All Foods".equals(selectedGroup); // For simplicity, all match "All Foods"
+            
+            if (matchesSearch && matchesGroup) {
+                availableModel.addElement(ingredient);
             }
         }
     }
     
     /**
-     * Add selected ingredients from available list to selected list
+     * Add selected ingredients with quantity and unit dialog
+     */
+    private void addSelectedIngredientsWithDialog() {
+        List<String> selected = availableList.getSelectedValuesList();
+        if (selected.isEmpty()) {
+            return;
+        }
+        
+        for (String ingredientName : selected) {
+            // Check if already selected
+            boolean alreadySelected = false;
+            for (int i = 0; i < selectedModel.size(); i++) {
+                if (selectedModel.getElementAt(i).name.equals(ingredientName)) {
+                    alreadySelected = true;
+                    break;
+                }
+            }
+            
+            if (!alreadySelected) {
+                // Show quantity and unit selection dialog
+                EditableIngredientInfo info = showIngredientEditDialog(ingredientName, 100.0, "g", false);
+                if (info != null) {
+                    selectedModel.addElement(info);
+                }
+            }
+        }
+        
+        availableList.clearSelection();
+    }
+    
+    /**
+     * Add selected ingredients with default quantity
      */
     private void addSelectedIngredients() {
         List<String> selected = availableList.getSelectedValuesList();
-        for (String ingredient : selected) {
-            if (!selectedModel.contains(ingredient)) {
-                selectedModel.addElement(ingredient);
+        for (String ingredientName : selected) {
+            // Check if already selected
+            boolean alreadySelected = false;
+            for (int i = 0; i < selectedModel.size(); i++) {
+                if (selectedModel.getElementAt(i).name.equals(ingredientName)) {
+                    alreadySelected = true;
+                    break;
+                }
+            }
+            
+            if (!alreadySelected) {
+                EditableIngredientInfo info = new EditableIngredientInfo(ingredientName, 100.0, "g");
+                selectedModel.addElement(info);
             }
         }
         availableList.clearSelection();
     }
     
     /**
-     * Remove selected ingredients from selected list
+     * Remove selected ingredients
      */
     private void removeSelectedIngredients() {
-        List<String> selected = selectedList.getSelectedValuesList();
-        for (String ingredient : selected) {
-            selectedModel.removeElement(ingredient);
+        List<EditableIngredientInfo> selected = selectedList.getSelectedValuesList();
+        for (EditableIngredientInfo info : selected) {
+            selectedModel.removeElement(info);
         }
         selectedList.clearSelection();
+    }
+    
+    /**
+     * Edit selected ingredient quantity and unit
+     */
+    private void editSelectedIngredient() {
+        EditableIngredientInfo selected = selectedList.getSelectedValue();
+        if (selected != null) {
+            EditableIngredientInfo updated = showIngredientEditDialog(
+                selected.name, selected.quantity, selected.unit, true);
+            if (updated != null) {
+                int index = selectedModel.indexOf(selected);
+                selectedModel.setElementAt(updated, index);
+            }
+        }
+    }
+    
+    /**
+     * Show ingredient edit dialog for quantity and unit
+     */
+    private EditableIngredientInfo showIngredientEditDialog(String ingredientName, 
+            double currentQuantity, String currentUnit, boolean isEdit) {
+        
+        JDialog dialog = new JDialog(this, (isEdit ? "Edit" : "Add") + " Ingredient: " + ingredientName, true);
+        dialog.setSize(400, 300);
+        dialog.setLocationRelativeTo(this);
+        
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(10, 10, 10, 10);
+        
+        // Ingredient name (readonly)
+        gbc.gridx = 0; gbc.gridy = 0;
+        panel.add(new JLabel("Ingredient:"), gbc);
+        gbc.gridx = 1;
+        JLabel nameLabel = new JLabel(ingredientName);
+        nameLabel.setFont(nameLabel.getFont().deriveFont(Font.BOLD));
+        panel.add(nameLabel, gbc);
+        
+        // Quantity input
+        gbc.gridx = 0; gbc.gridy = 1;
+        panel.add(new JLabel("Quantity:"), gbc);
+        gbc.gridx = 1;
+        JTextField quantityField = new JTextField(String.valueOf(currentQuantity), 10);
+        panel.add(quantityField, gbc);
+        
+        // Unit selection
+        gbc.gridx = 0; gbc.gridy = 2;
+        panel.add(new JLabel("Unit:"), gbc);
+        gbc.gridx = 1;
+        
+        JComboBox<String> unitCombo = new JComboBox<>();
+        
+        // Try to get units from UnitConversionService
+        try {
+            int foodId = nutritionGateway.getFoodId(ingredientName);
+            if (foodId > 0) {
+                List<String> availableUnits = unitConversionService.getAvailableUnitsForFood(foodId);
+                for (String unit : availableUnits) {
+                    unitCombo.addItem(unit);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Could not get units for " + ingredientName + ": " + e.getMessage());
+        }
+        
+        // Add default units if none found
+        if (unitCombo.getItemCount() == 0) {
+            String[] defaultUnits = {"g", "ml", "1 cup", "1 tbsp", "1 tsp", "1 slice", "1 piece", "1 serving"};
+            for (String unit : defaultUnits) {
+                unitCombo.addItem(unit);
+            }
+        }
+        
+        // Set current unit
+        unitCombo.setSelectedItem(currentUnit);
+        panel.add(unitCombo, gbc);
+        
+        // Buttons
+        gbc.gridx = 0; gbc.gridy = 3; gbc.gridwidth = 2;
+        JPanel buttonPanel = new JPanel(new FlowLayout());
+        JButton okButton = new JButton("OK");
+        JButton cancelButton = new JButton("Cancel");
+        buttonPanel.add(okButton);
+        buttonPanel.add(cancelButton);
+        panel.add(buttonPanel, gbc);
+        
+        // Result holder
+        final EditableIngredientInfo[] result = {null};
+        
+        okButton.addActionListener(e -> {
+            try {
+                double quantity = Double.parseDouble(quantityField.getText().trim());
+                String unit = (String) unitCombo.getSelectedItem();
+                
+                if (quantity > 0) {
+                    result[0] = new EditableIngredientInfo(ingredientName, quantity, unit);
+                    dialog.dispose();
+                } else {
+                    JOptionPane.showMessageDialog(dialog, "Quantity must be positive", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(dialog, "Please enter a valid number for quantity", "Invalid Input", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+        
+        cancelButton.addActionListener(e -> dialog.dispose());
+        
+        dialog.add(panel);
+        dialog.setVisible(true);
+        
+        return result[0];
     }
     
     /**
@@ -438,49 +703,30 @@ public class IngredientSelectionDialog extends JDialog {
      */
     private void handleCreateMeal() {
         // Allow empty meals when editing (user can remove all ingredients)
-        // But require at least one ingredient when creating new meals
         if (selectedModel.isEmpty() && existingMeal == null) {
             JOptionPane.showMessageDialog(this, "Please select at least one food item", 
                                         "No Foods Selected", JOptionPane.WARNING_MESSAGE);
             return;
         }
         
-        try {
-            double quantity = Double.parseDouble(quantityField.getText());
-            if (quantity <= 0) {
-                JOptionPane.showMessageDialog(this, "Quantity must be positive", 
-                                            "Invalid Quantity", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-            
-            // Convert selected ingredients to list
-            List<String> selectedIngredients = new ArrayList<>();
-            for (int i = 0; i < selectedModel.size(); i++) {
-                selectedIngredients.add(selectedModel.getElementAt(i));
-            }
-            
-            // Create quantities list (same quantity for all)
-            List<Double> quantities = new ArrayList<>();
-            for (int i = 0; i < selectedIngredients.size(); i++) {
-                quantities.add(quantity);
-            }
-            
-            // Create result
-            result = new MealLogMediator.IngredientSelectionResult(selectedIngredients, quantities, true);
-            confirmed = true;
-            dispose();
-            
-        } catch (NumberFormatException ex) {
-            JOptionPane.showMessageDialog(this, "Please enter a valid number for quantity", 
-                                        "Invalid Quantity", JOptionPane.ERROR_MESSAGE);
+        // Convert selected ingredients to IngredientDTO list
+        List<IngredientDTO> ingredients = new ArrayList<>();
+        for (int i = 0; i < selectedModel.size(); i++) {
+            EditableIngredientInfo info = selectedModel.getElementAt(i);
+            ingredients.add(new IngredientDTO(info.name, info.quantity, info.unit));
         }
+        
+        // Create result
+        result = new MealLogMediator.IngredientSelectionResult(ingredients, true);
+        confirmed = true;
+        dispose();
     }
     
     /**
      * Handle cancel action
      */
     private void handleCancel() {
-        result = new MealLogMediator.IngredientSelectionResult(new ArrayList<>(), new ArrayList<>(), false);
+        result = new MealLogMediator.IngredientSelectionResult(new ArrayList<>(), false);
         confirmed = false;
         dispose();
     }
@@ -492,8 +738,7 @@ public class IngredientSelectionDialog extends JDialog {
         return result;
     }
     
-    // Helper methods for ingredient data (extracted from original MealLogPanel)
-    
+    // Helper methods for ingredient data
     private String[] getCommonIngredients(String mealType) {
         switch (mealType.toLowerCase()) {
             case "breakfast":
@@ -511,89 +756,6 @@ public class IngredientSelectionDialog extends JDialog {
             default:
                 return new String[]{"apple", "banana", "chicken", "rice", "bread", "milk", "eggs", "cheese", 
                                   "tomato", "lettuce", "pasta", "beef", "fish", "yogurt", "oats", "olive oil"};
-        }
-    }
-    
-    private void addSearchResults(DefaultListModel<String> model, String searchText) {
-        try {
-            if (nutritionGateway != null && nutritionGateway.isAvailable()) {
-                // Use the real CNF database search
-                List<String> searchResults = nutritionGateway.searchIngredients(searchText);
-                
-                // Add search results, limiting to 50 for better performance
-                int count = 0;
-                for (String ingredient : searchResults) {
-                    if (count >= 50) break;
-                    model.addElement(ingredient);
-                    count++;
-                }
-                
-                if (count > 0) return;
-            }
-        } catch (Exception e) {
-            System.err.println("Error searching CNF database: " + e.getMessage());
-        }
-        
-        // Fallback to simulated search
-        addFallbackSearchResults(model, searchText);
-    }
-    
-    private void addFallbackSearchResults(DefaultListModel<String> model, String searchText) {
-        Map<String, String[]> searchDatabase = new HashMap<>();
-        searchDatabase.put("chicken", new String[]{"chicken breast", "chicken thigh", "chicken wing", "chicken drumstick"});
-        searchDatabase.put("beef", new String[]{"beef sirloin", "ground beef", "beef brisket", "beef ribs"});
-        searchDatabase.put("fish", new String[]{"salmon", "tuna", "cod", "mackerel", "sardines"});
-        
-        for (Map.Entry<String, String[]> entry : searchDatabase.entrySet()) {
-            if (entry.getKey().contains(searchText) || searchText.contains(entry.getKey())) {
-                for (String food : entry.getValue()) {
-                    if (food.toLowerCase().contains(searchText) && !model.contains(food)) {
-                        model.addElement(food);
-                        if (model.size() >= 50) return;
-                    }
-                }
-            }
-        }
-    }
-    
-    private void addFoodGroupItems(DefaultListModel<String> model, String groupName) {
-        // Use predefined food groups since the gateway doesn't support group filtering
-        String[] foods = getFallbackGroupFoods(groupName);
-        if (foods != null) {
-            for (String food : foods) {
-                model.addElement(food);
-            }
-        }
-    }
-    
-    private String[] getFallbackGroupFoods(String groupName) {
-        Map<String, String[]> groupFoods = new HashMap<>();
-        groupFoods.put("Dairy and Egg Products", new String[]{"whole milk", "skim milk", "cheddar cheese", "mozzarella cheese", "cottage cheese", "yogurt", "butter", "cream", "eggs", "egg whites"});
-        groupFoods.put("Poultry Products", new String[]{"chicken breast", "chicken thigh", "turkey breast", "duck", "chicken liver", "ground chicken", "chicken wings", "turkey bacon"});
-        groupFoods.put("Vegetables and Vegetable Products", new String[]{"broccoli", "carrots", "spinach", "bell pepper", "onion", "tomato", "lettuce", "cucumber", "celery", "garlic"});
-        groupFoods.put("Fruits and fruit juices", new String[]{"apple", "banana", "orange", "grapes", "strawberries", "blueberries", "pineapple", "mango", "orange juice", "apple juice"});
-        groupFoods.put("Beef Products", new String[]{"ground beef", "beef sirloin", "beef tenderloin", "beef ribs", "beef brisket", "beef liver", "beef chuck roast", "steak"});
-        groupFoods.put("Pork Products", new String[]{"pork chops", "bacon", "ham", "pork tenderloin", "ground pork", "pork ribs", "pork shoulder", "sausage"});
-        groupFoods.put("Finfish and Shellfish Products", new String[]{"salmon", "tuna", "cod", "shrimp", "crab", "lobster", "mackerel", "sardines", "tilapia", "scallops"});
-        groupFoods.put("Cereals, Grains and Pasta", new String[]{"white rice", "brown rice", "quinoa", "oats", "pasta", "noodles", "barley", "wheat flour", "bread", "cereal"});
-        groupFoods.put("Baked Products", new String[]{"white bread", "whole wheat bread", "bagel", "muffin", "croissant", "crackers", "cookies", "cake", "pie", "pastry"});
-        groupFoods.put("Nuts and Seeds", new String[]{"almonds", "walnuts", "peanuts", "cashews", "sunflower seeds", "pumpkin seeds", "pecans", "pistachios", "peanut butter", "almond butter"});
-        groupFoods.put("Legumes and Legume Products", new String[]{"black beans", "kidney beans", "chickpeas", "lentils", "pinto beans", "navy beans", "lima beans", "split peas", "tofu", "soy milk"});
-        groupFoods.put("Spices and Herbs", new String[]{"salt", "pepper", "garlic powder", "onion powder", "paprika", "cumin", "oregano", "basil", "thyme", "cinnamon"});
-        groupFoods.put("Fats and Oils", new String[]{"olive oil", "vegetable oil", "butter", "margarine", "coconut oil", "canola oil", "sesame oil", "avocado oil", "lard", "shortening"});
-        groupFoods.put("Beverages", new String[]{"water", "coffee", "tea", "soda", "juice", "beer", "wine", "energy drink", "sports drink", "milk shake"});
-        groupFoods.put("Sweets", new String[]{"sugar", "honey", "chocolate", "candy", "ice cream", "cookies", "cake", "pie", "jam", "syrup"});
-        return groupFoods.get(groupName);
-    }
-    
-    private void addPopularFoods(DefaultListModel<String> model) {
-        String[] popularFoods = {
-            "chicken breast", "ground beef", "salmon", "eggs", "milk", "cheese", "rice", "pasta",
-            "broccoli", "carrots", "apple", "banana", "bread", "yogurt", "olive oil"
-        };
-        
-        for (String food : popularFoods) {
-            model.addElement(food);
         }
     }
 } 

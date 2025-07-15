@@ -293,7 +293,7 @@ public class MealLogMediator implements
                                       IngredientSelectionResult result, MealDTO existingMeal) {
         try {
             // Calculate nutrition using the nutrition gateway
-            NutrientInfo totalNutrients = calculateTotalNutrition(result.getIngredients(), result.getQuantities());
+            NutrientInfo totalNutrients = calculateTotalNutrition(result.getIngredients());
             
             if (existingMeal != null) {
                 // Update existing meal
@@ -303,7 +303,6 @@ public class MealLogMediator implements
                     existingMeal.getDate(),
                     mealType.toLowerCase(),
                     result.getIngredients(),
-                    result.getQuantities(),
                     totalNutrients
                 );
                 
@@ -316,7 +315,6 @@ public class MealLogMediator implements
                     selectedDate,
                     mealType.toLowerCase(),
                     result.getIngredients(),
-                    result.getQuantities(),
                     totalNutrients
                 );
                 
@@ -331,27 +329,41 @@ public class MealLogMediator implements
     /**
      * Calculate total nutrition for selected ingredients
      * 
-     * @param ingredients List of ingredient names
-     * @param quantities List of quantities (in grams)
+     * @param ingredients List of IngredientDTO objects
      * @return Total nutrition information
      */
-    private NutrientInfo calculateTotalNutrition(java.util.List<String> ingredients, java.util.List<Double> quantities) {
+    private NutrientInfo calculateTotalNutrition(java.util.List<ca.nutrisci.application.dto.IngredientDTO> ingredients) {
         NutrientInfo totalNutrients = new NutrientInfo();
         
-        for (int i = 0; i < ingredients.size(); i++) {
-            String ingredient = ingredients.get(i);
-            double quantity = quantities.get(i);
-            
+        for (ca.nutrisci.application.dto.IngredientDTO ingredient : ingredients) {
             try {
-                NutrientInfo ingredientNutrients = nutritionGateway.lookupIngredient(ingredient);
+                NutrientInfo ingredientNutrients = nutritionGateway.lookupIngredient(ingredient.getName());
                 if (ingredientNutrients != null) {
+                    // Convert quantity to grams using UnitConversionService
+                    double quantityInGrams = ingredient.getQuantity();
+                    
+                    // If not already in grams, convert using UnitConversionService
+                    if (!ingredient.getUnit().equalsIgnoreCase("g") && !ingredient.getUnit().equalsIgnoreCase("grams")) {
+                        try {
+                            ca.nutrisci.application.services.UnitConversionService unitService = 
+                                ca.nutrisci.application.services.UnitConversionService.getInstance();
+                            int foodId = nutritionGateway.getFoodId(ingredient.getName());
+                            if (foodId > 0) {
+                                quantityInGrams = unitService.convertToGrams(foodId, ingredient.getQuantity(), ingredient.getUnit());
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error converting units for " + ingredient.getName() + ": " + e.getMessage());
+                            // Use original quantity as fallback
+                        }
+                    }
+                    
                     // Scale nutrition based on quantity (per 100g)
-                    double scaleFactor = quantity / 100.0;
+                    double scaleFactor = quantityInGrams / 100.0;
                     NutrientInfo scaledNutrients = ingredientNutrients.multiply(scaleFactor);
                     totalNutrients = totalNutrients.add(scaledNutrients);
                 }
             } catch (Exception e) {
-                System.err.println("Error getting nutrition for ingredient: " + ingredient + ", " + e.getMessage());
+                System.err.println("Error getting nutrition for ingredient: " + ingredient.getName() + ", " + e.getMessage());
                 // Continue with other ingredients
             }
         }
@@ -385,11 +397,9 @@ public class MealLogMediator implements
         details.append("Date: ").append(meal.getDate()).append("\n\n");
         details.append("Ingredients:\n");
         
-        for (int i = 0; i < meal.getIngredients().size(); i++) {
-            details.append("• ").append(meal.getIngredients().get(i));
-            if (i < meal.getQuantities().size()) {
-                details.append(" (").append(meal.getQuantities().get(i)).append("g)");
-            }
+        for (ca.nutrisci.application.dto.IngredientDTO ingredient : meal.getIngredients()) {
+            details.append("• ").append(ingredient.getName());
+            details.append(" (").append(ingredient.getQuantity()).append(" ").append(ingredient.getUnit()).append(")");
             details.append("\n");
         }
         
@@ -439,7 +449,9 @@ public class MealLogMediator implements
             meal.getNutrients().getCarbs(),
             meal.getNutrients().getFat(),
             meal.getNutrients().getFiber(),
-            String.join(", ", meal.getIngredients())
+            meal.getIngredients().stream()
+                .map(ingredient -> ingredient.getName() + " (" + ingredient.getQuantity() + " " + ingredient.getUnit() + ")")
+                .collect(java.util.stream.Collectors.joining(", "))
         );
         
         String titleText = "Meal " + (action.equals("created") ? "Added" : "Updated") + " Successfully!";
@@ -492,21 +504,54 @@ public class MealLogMediator implements
      * Result class for ingredient selection dialog
      */
     public static class IngredientSelectionResult {
-        private final java.util.List<String> ingredients;
-        private final java.util.List<Double> quantities;
+        private final java.util.List<ca.nutrisci.application.dto.IngredientDTO> ingredients;
         private final boolean confirmed;
         
-        public IngredientSelectionResult(java.util.List<String> ingredients, 
-                                       java.util.List<Double> quantities, 
+        public IngredientSelectionResult(java.util.List<ca.nutrisci.application.dto.IngredientDTO> ingredients, 
                                        boolean confirmed) {
             this.ingredients = ingredients;
-            this.quantities = quantities;
             this.confirmed = confirmed;
         }
         
-        public java.util.List<String> getIngredients() { return ingredients; }
-        public java.util.List<Double> getQuantities() { return quantities; }
+        // Backward compatibility constructor
+        public IngredientSelectionResult(java.util.List<String> ingredientNames, 
+                                       java.util.List<Double> quantities, 
+                                       boolean confirmed) {
+            this.confirmed = confirmed;
+            this.ingredients = new java.util.ArrayList<>();
+            
+            if (ingredientNames != null) {
+                for (int i = 0; i < ingredientNames.size(); i++) {
+                    String name = ingredientNames.get(i);
+                    double quantity = (quantities != null && i < quantities.size()) ? quantities.get(i) : 100.0;
+                    this.ingredients.add(new ca.nutrisci.application.dto.IngredientDTO(name, quantity, "g"));
+                }
+            }
+        }
+        
+        public java.util.List<ca.nutrisci.application.dto.IngredientDTO> getIngredients() { return ingredients; }
         public boolean isConfirmed() { return confirmed; }
+        
+        // Backward compatibility methods
+        public java.util.List<String> getIngredientNames() {
+            java.util.List<String> names = new java.util.ArrayList<>();
+            if (ingredients != null) {
+                for (ca.nutrisci.application.dto.IngredientDTO ingredient : ingredients) {
+                    names.add(ingredient.getName());
+                }
+            }
+            return names;
+        }
+        
+        public java.util.List<Double> getQuantities() {
+            java.util.List<Double> quantities = new java.util.ArrayList<>();
+            if (ingredients != null) {
+                for (ca.nutrisci.application.dto.IngredientDTO ingredient : ingredients) {
+                    quantities.add(ingredient.getQuantity());
+                }
+            }
+            return quantities;
+        }
     }
     
 } 

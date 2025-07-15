@@ -1,6 +1,7 @@
 package ca.nutrisci.application.dto;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,8 +14,7 @@ public class MealDTO {
     private UUID profileId;
     private LocalDate date;
     private String mealType; // breakfast, lunch, dinner, snack
-    private List<String> ingredients;
-    private List<Double> quantities;
+    private List<IngredientDTO> ingredients;
     private NutrientInfo nutrients;
 
     // Default constructor
@@ -22,14 +22,33 @@ public class MealDTO {
 
     // Full constructor
     public MealDTO(UUID id, UUID profileId, LocalDate date, String mealType, 
-                   List<String> ingredients, List<Double> quantities, NutrientInfo nutrients) {
+                   List<IngredientDTO> ingredients, NutrientInfo nutrients) {
         this.id = id;
         this.profileId = profileId;
         this.date = date;
         this.mealType = mealType;
         this.ingredients = ingredients;
-        this.quantities = quantities;
         this.nutrients = nutrients;
+    }
+    
+    // Backward compatibility constructor
+    public MealDTO(UUID id, UUID profileId, LocalDate date, String mealType, 
+                   List<String> ingredientNames, List<Double> quantities, NutrientInfo nutrients) {
+        this.id = id;
+        this.profileId = profileId;
+        this.date = date;
+        this.mealType = mealType;
+        this.nutrients = nutrients;
+        
+        // Convert to IngredientDTO list
+        this.ingredients = new ArrayList<>();
+        if (ingredientNames != null) {
+            for (int i = 0; i < ingredientNames.size(); i++) {
+                String name = ingredientNames.get(i);
+                double quantity = (quantities != null && i < quantities.size()) ? quantities.get(i) : 100.0;
+                this.ingredients.add(new IngredientDTO(name, quantity, "g")); // Default to grams
+            }
+        }
     }
 
     // Getters and setters
@@ -65,20 +84,34 @@ public class MealDTO {
         this.mealType = mealType;
     }
 
-    public List<String> getIngredients() {
+    public List<IngredientDTO> getIngredients() {
         return ingredients;
     }
 
-    public void setIngredients(List<String> ingredients) {
+    public void setIngredients(List<IngredientDTO> ingredients) {
         this.ingredients = ingredients;
     }
 
+    // Backward compatibility method
     public List<Double> getQuantities() {
+        List<Double> quantities = new ArrayList<>();
+        if (ingredients != null) {
+            for (IngredientDTO ingredient : ingredients) {
+                quantities.add(ingredient.getQuantity());
+            }
+        }
         return quantities;
     }
-
-    public void setQuantities(List<Double> quantities) {
-        this.quantities = quantities;
+    
+    // Backward compatibility method
+    public List<String> getIngredientNames() {
+        List<String> names = new ArrayList<>();
+        if (ingredients != null) {
+            for (IngredientDTO ingredient : ingredients) {
+                names.add(ingredient.getName());
+            }
+        }
+        return names;
     }
 
     public NutrientInfo getNutrients() {
@@ -91,7 +124,7 @@ public class MealDTO {
 
     @Override
     public String toString() {
-        return String.format("MealDTO{id=%s, profileId=%s, date=%s, mealType='%s', ingredients=%s, quantities=%s, nutrients=%s}",
-                id, profileId, date, mealType, ingredients, quantities, nutrients);
+        return String.format("MealDTO{id=%s, profileId=%s, date=%s, mealType='%s', ingredients=%s, nutrients=%s}",
+                id, profileId, date, mealType, ingredients, nutrients);
     }
 } 

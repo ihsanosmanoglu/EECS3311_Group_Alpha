@@ -53,7 +53,7 @@ public class MealLogService {
             }
             
             // Check all ingredients are not empty (only if ingredients exist)
-            for (String ingredient : mealDTO.getIngredients()) {
+            for (String ingredient : mealDTO.getIngredientNames()) {
                 if (ingredient == null || ingredient.trim().isEmpty()) {
                     return false;
                 }
@@ -73,8 +73,8 @@ public class MealLogService {
         
         NutrientInfo totalNutrients = new NutrientInfo();
         
-        for (int i = 0; i < mealDTO.getIngredients().size(); i++) {
-            String ingredient = mealDTO.getIngredients().get(i);
+        for (int i = 0; i < mealDTO.getIngredientNames().size(); i++) {
+            String ingredient = mealDTO.getIngredientNames().get(i);
             double quantity = mealDTO.getQuantities().get(i);
             
             NutrientInfo ingredientNutrients = nutritionGateway.lookupIngredient(ingredient);
@@ -130,7 +130,7 @@ public class MealLogService {
         
         StringBuilder summary = new StringBuilder();
         summary.append(meal.getMealType().toUpperCase()).append(" (").append(meal.getDate()).append("): ");
-        summary.append(String.join(", ", meal.getIngredients()));
+        summary.append(String.join(", ", meal.getIngredientNames()));
         
         if (meal.getNutrients() != null) {
             summary.append(" - ").append(String.format("%.0f calories", meal.getNutrients().getCalories()));

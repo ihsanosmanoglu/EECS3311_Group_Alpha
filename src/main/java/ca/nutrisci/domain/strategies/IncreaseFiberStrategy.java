@@ -77,7 +77,7 @@ public class IncreaseFiberStrategy implements SwapStrategy {
     public List<SwapDTO> generateSwaps(MealDTO meal, SwapGoalDTO goal) {
         List<SwapDTO> swaps = new ArrayList<>();
         
-        List<String> ingredients = meal.getIngredients();
+        List<String> ingredients = meal.getIngredientNames();
         List<Double> quantities = meal.getQuantities();
         
         for (int i = 0; i < ingredients.size(); i++) {

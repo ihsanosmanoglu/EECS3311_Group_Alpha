@@ -482,6 +482,7 @@ public class ExternalAdapter implements INutritionGateway {
     /**
      * Get ingredients by food group
      */
+    @Override
     public List<String> getIngredientsByGroup(String groupName) {
         if (!initialized) {
             initializeData();
@@ -514,8 +515,29 @@ public class ExternalAdapter implements INutritionGateway {
     }
     
     /**
+     * Get the food ID for a specific ingredient name
+     */
+    @Override
+    public int getFoodId(String foodName) {
+        if (!initialized) {
+            initializeData();
+        }
+        
+        String foodId = foodNameToIdMap.get(foodName.toLowerCase().trim());
+        if (foodId != null) {
+            try {
+                return Integer.parseInt(foodId);
+            } catch (NumberFormatException e) {
+                return -1;
+            }
+        }
+        return -1;
+    }
+    
+    /**
      * Get all food groups
      */
+    @Override
     public List<String> getAllFoodGroups() {
         if (!initialized) {
             initializeData();
