@@ -171,7 +171,20 @@ public class DatabaseManager {
                 "height DOUBLE NOT NULL, " +
                 "is_active BOOLEAN DEFAULT FALSE, " +
                 "units VARCHAR(10) DEFAULT 'metric', " +
-                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+                "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, " +
+                "updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+            
+            // Add updated_at column to existing profiles table if it doesn't exist
+            try {
+                stmt.execute("ALTER TABLE profiles ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP");
+                System.out.println("✅ Added updated_at column to existing profiles table");
+            } catch (SQLException e) {
+                // Column probably already exists, ignore
+                if (!e.getMessage().toLowerCase().contains("already exists") && 
+                    !e.getMessage().toLowerCase().contains("duplicate column")) {
+                    System.err.println("⚠️ Could not add updated_at column: " + e.getMessage());
+                }
+            }
             
             // Meals table  
             stmt.execute("CREATE TABLE IF NOT EXISTS meals (" +
