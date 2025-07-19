@@ -2,8 +2,10 @@ package ca.nutrisci.application.facades;
 
 import ca.nutrisci.application.dto.ProfileDTO;
 
+
 import java.util.List;
 import java.util.UUID;
+
 
 /**
  * IProfileFacade - Interface for profile management operations
@@ -12,6 +14,7 @@ import java.util.UUID;
 public interface IProfileFacade {
     
     /**
+
      * Create a new profile
      */
     ProfileDTO createProfile(String name, int age, String sex, double weight, double height, String units);
@@ -73,6 +76,7 @@ public interface IProfileFacade {
     
     /**
      * Validate profile data
+
      */
     boolean validateProfile(ProfileDTO profileDTO);
 } 

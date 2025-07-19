@@ -8,6 +8,7 @@ import java.util.UUID;
  */
 public class ProfileDTO {
     
+
     private UUID id;
     private String name;
     private int age;
@@ -113,5 +114,6 @@ public class ProfileDTO {
     @Override
     public int hashCode() {
         return id != null ? id.hashCode() : 0;
+
     }
 } 

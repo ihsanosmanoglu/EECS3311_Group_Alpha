@@ -1,12 +1,14 @@
 package ca.nutrisci.application.facades;
 
 import ca.nutrisci.application.dto.ProfileDTO;
+
 import ca.nutrisci.application.services.ProfileService;
 import ca.nutrisci.domain.entities.Profile;
 import ca.nutrisci.infrastructure.data.repositories.ProfileRepo;
 
 import java.util.List;
 import java.util.UUID;
+
 
 /**
  * ProfileManagement - Facade for all profile-related operations
@@ -15,6 +17,7 @@ import java.util.UUID;
  */
 public class ProfileManagement implements IProfileFacade {
     
+
     private ProfileService profileService;
     private ProfileRepo profileRepo;
     
@@ -278,5 +281,6 @@ public class ProfileManagement implements IProfileFacade {
     @Override
     public boolean validateProfile(ProfileDTO profileDTO) {
         return profileService.validate(profileDTO);
+
     }
 } 
