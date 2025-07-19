@@ -72,8 +72,8 @@ public class ExternalAdapter implements INutritionGateway {
             e.printStackTrace();
         }
         
-        // Always load default data to ensure we have basic ingredients
-        loadDefaultData();
+        // CNF-only mode: No default data loaded, only Canada Nutrient File data
+        // loadDefaultData(); // REMOVED: User requested CNF data only
         initialized = true;
         
         System.out.println("Total ingredients available: " + nutritionCache.size());

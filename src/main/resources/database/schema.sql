@@ -23,8 +23,9 @@ CREATE TABLE IF NOT EXISTS meals (
     profile_id VARCHAR(36) NOT NULL,
     date DATE NOT NULL,
     meal_type VARCHAR(20) NOT NULL,
-    ingredients TEXT NOT NULL,
-    quantities TEXT NOT NULL,
+    ingredients_json TEXT NOT NULL, -- Store IngredientDTO list as JSON
+    ingredients TEXT, -- Keep for backward compatibility
+    quantities TEXT, -- Keep for backward compatibility
     calories DECIMAL(8,2) DEFAULT 0,
     protein DECIMAL(8,2) DEFAULT 0,
     carbs DECIMAL(8,2) DEFAULT 0,

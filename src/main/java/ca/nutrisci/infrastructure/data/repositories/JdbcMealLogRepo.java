@@ -26,16 +26,18 @@ public class JdbcMealLogRepo implements MealLogRepo {
     private final Gson gson;
     private final Type stringListType;
     private final Type doubleListType;
+    private final Type ingredientListType;
     
     public JdbcMealLogRepo() {
         this.dbManager = DatabaseManager.getInstance();
         this.gson = new Gson();
         this.stringListType = new TypeToken<List<String>>(){}.getType();
         this.doubleListType = new TypeToken<List<Double>>(){}.getType();
+        this.ingredientListType = new TypeToken<List<ca.nutrisci.application.dto.IngredientDTO>>(){}.getType();
     }
     
     public MealDTO save(MealDTO meal) {
-        String sql = "INSERT INTO meals (id, profile_id, date, meal_type, ingredients, quantities, calories, protein, carbs, fat, fiber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        String sql = "INSERT INTO meals (id, profile_id, date, meal_type, ingredients_json, ingredients, quantities, calories, protein, carbs, fat, fiber) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
         
         try (Connection conn = dbManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
@@ -46,30 +48,36 @@ public class JdbcMealLogRepo implements MealLogRepo {
             stmt.setString(2, meal.getProfileId().toString());
             stmt.setDate(3, Date.valueOf(meal.getDate()));
             stmt.setString(4, meal.getMealType());
-            stmt.setString(5, gson.toJson(meal.getIngredientNames()));
-            stmt.setString(6, gson.toJson(meal.getQuantities()));
+            
+            // Store full IngredientDTO list as JSON (with units)
+            stmt.setString(5, gson.toJson(meal.getIngredients()));
+            
+            // Store backward compatibility data
+            stmt.setString(6, gson.toJson(meal.getIngredientNames()));
+            stmt.setString(7, gson.toJson(meal.getQuantities()));
             
             NutrientInfo nutrients = meal.getNutrients();
             if (nutrients != null) {
-                stmt.setDouble(7, nutrients.getCalories());
-                stmt.setDouble(8, nutrients.getProtein());
-                stmt.setDouble(9, nutrients.getCarbs());
-                stmt.setDouble(10, nutrients.getFat());
-                stmt.setDouble(11, nutrients.getFiber());
+                stmt.setDouble(8, nutrients.getCalories());
+                stmt.setDouble(9, nutrients.getProtein());
+                stmt.setDouble(10, nutrients.getCarbs());
+                stmt.setDouble(11, nutrients.getFat());
+                stmt.setDouble(12, nutrients.getFiber());
             } else {
-                stmt.setDouble(7, 0.0);
                 stmt.setDouble(8, 0.0);
                 stmt.setDouble(9, 0.0);
                 stmt.setDouble(10, 0.0);
                 stmt.setDouble(11, 0.0);
+                stmt.setDouble(12, 0.0);
             }
             
             int rows = stmt.executeUpdate();
             
             if (rows > 0) {
                 System.out.println("✅ Meal saved to database: " + meal.getMealType() + " (" + id + ")");
+                // Return the meal with original IngredientDTO objects (preserving units)
                 return new MealDTO(id, meal.getProfileId(), meal.getDate(), meal.getMealType(),
-                                 meal.getIngredientNames(), meal.getQuantities(), meal.getNutrients());
+                                 meal.getIngredients(), meal.getNutrients());
             } else {
                 throw new RuntimeException("Failed to save meal to database");
             }
@@ -81,39 +89,44 @@ public class JdbcMealLogRepo implements MealLogRepo {
     }
     
     public MealDTO update(UUID mealId, MealDTO updatedMeal) {
-        String sql = "UPDATE meals SET meal_type = ?, ingredients = ?, quantities = ?, calories = ?, protein = ?, carbs = ?, fat = ?, fiber = ? WHERE id = ?";
+        String sql = "UPDATE meals SET meal_type = ?, ingredients_json = ?, ingredients = ?, quantities = ?, calories = ?, protein = ?, carbs = ?, fat = ?, fiber = ? WHERE id = ?";
         
         try (Connection conn = dbManager.getConnection();
              PreparedStatement stmt = conn.prepareStatement(sql)) {
             
             stmt.setString(1, updatedMeal.getMealType());
-            stmt.setString(2, gson.toJson(updatedMeal.getIngredientNames()));
-            stmt.setString(3, gson.toJson(updatedMeal.getQuantities()));
+            
+            // Store full IngredientDTO list as JSON (with units)
+            stmt.setString(2, gson.toJson(updatedMeal.getIngredients()));
+            
+            // Store backward compatibility data
+            stmt.setString(3, gson.toJson(updatedMeal.getIngredientNames()));
+            stmt.setString(4, gson.toJson(updatedMeal.getQuantities()));
             
             NutrientInfo nutrients = updatedMeal.getNutrients();
             if (nutrients != null) {
-                stmt.setDouble(4, nutrients.getCalories());
-                stmt.setDouble(5, nutrients.getProtein());
-                stmt.setDouble(6, nutrients.getCarbs());
-                stmt.setDouble(7, nutrients.getFat());
-                stmt.setDouble(8, nutrients.getFiber());
+                stmt.setDouble(5, nutrients.getCalories());
+                stmt.setDouble(6, nutrients.getProtein());
+                stmt.setDouble(7, nutrients.getCarbs());
+                stmt.setDouble(8, nutrients.getFat());
+                stmt.setDouble(9, nutrients.getFiber());
             } else {
-                stmt.setDouble(4, 0.0);
                 stmt.setDouble(5, 0.0);
                 stmt.setDouble(6, 0.0);
                 stmt.setDouble(7, 0.0);
                 stmt.setDouble(8, 0.0);
+                stmt.setDouble(9, 0.0);
             }
             
-            stmt.setString(9, mealId.toString());
+            stmt.setString(10, mealId.toString());
             
             int rows = stmt.executeUpdate();
             
             if (rows > 0) {
                 System.out.println("✅ Meal updated in database: " + mealId);
+                // Return the meal with original IngredientDTO objects (preserving units)
                 return new MealDTO(mealId, updatedMeal.getProfileId(), updatedMeal.getDate(),
-                                 updatedMeal.getMealType(), updatedMeal.getIngredientNames(),
-                                 updatedMeal.getQuantities(), updatedMeal.getNutrients());
+                                 updatedMeal.getMealType(), updatedMeal.getIngredients(), updatedMeal.getNutrients());
             } else {
                 throw new RuntimeException("Meal not found for update: " + mealId);
             }
@@ -298,10 +311,6 @@ public class JdbcMealLogRepo implements MealLogRepo {
             LocalDate date = rs.getDate("date").toLocalDate();
             String mealType = rs.getString("meal_type");
             
-            // Deserialize JSON arrays
-            List<String> ingredients = gson.fromJson(rs.getString("ingredients"), stringListType);
-            List<Double> quantities = gson.fromJson(rs.getString("quantities"), doubleListType);
-            
             // Create nutrition info
             NutrientInfo nutrients = new NutrientInfo(
                 rs.getDouble("calories"),
@@ -311,6 +320,20 @@ public class JdbcMealLogRepo implements MealLogRepo {
                 rs.getDouble("fiber")
             );
             
+            // Try to load from new ingredients_json column first
+            String ingredientsJson = rs.getString("ingredients_json");
+            if (ingredientsJson != null && !ingredientsJson.trim().isEmpty()) {
+                try {
+                    List<ca.nutrisci.application.dto.IngredientDTO> ingredientList = gson.fromJson(ingredientsJson, ingredientListType);
+                    return new MealDTO(id, profileId, date, mealType, ingredientList, nutrients);
+                } catch (Exception e) {
+                    System.err.println("⚠️ Error parsing ingredients_json, falling back to legacy format: " + e.getMessage());
+                }
+            }
+            
+            // Fall back to legacy format (ingredients + quantities arrays)
+            List<String> ingredients = gson.fromJson(rs.getString("ingredients"), stringListType);
+            List<Double> quantities = gson.fromJson(rs.getString("quantities"), doubleListType);
             return new MealDTO(id, profileId, date, mealType, ingredients, quantities, nutrients);
             
         } catch (Exception e) {

@@ -347,12 +347,25 @@ public class MealLogMediator implements
                         try {
                             ca.nutrisci.application.services.UnitConversionService unitService = 
                                 ca.nutrisci.application.services.UnitConversionService.getInstance();
+                            
+                            // Make sure the service is initialized
+                            if (!unitService.isInitialized()) {
+                                unitService.initialize();
+                            }
+                            
                             int foodId = nutritionGateway.getFoodId(ingredient.getName());
                             if (foodId > 0) {
-                                quantityInGrams = unitService.convertToGrams(foodId, ingredient.getQuantity(), ingredient.getUnit());
+                                System.out.println("🔍 Converting: " + ingredient.getQuantity() + " " + ingredient.getUnit() + 
+                                                  " of '" + ingredient.getName() + "' (foodId: " + foodId + ")");
+                                double convertedGrams = unitService.convertToGrams(foodId, ingredient.getQuantity(), ingredient.getUnit());
+                                System.out.println("📏 Original: " + quantityInGrams + "g -> Converted: " + convertedGrams + "g");
+                                quantityInGrams = convertedGrams;
+                            } else {
+                                System.err.println("⚠️ Food ID not found for: " + ingredient.getName());
                             }
                         } catch (Exception e) {
-                            System.err.println("Error converting units for " + ingredient.getName() + ": " + e.getMessage());
+                            System.err.println("❌ Error converting units for " + ingredient.getName() + ": " + e.getMessage());
+                            e.printStackTrace();
                             // Use original quantity as fallback
                         }
                     }
@@ -399,7 +412,20 @@ public class MealLogMediator implements
         
         for (ca.nutrisci.application.dto.IngredientDTO ingredient : meal.getIngredients()) {
             details.append("• ").append(ingredient.getName());
-            details.append(" (").append(ingredient.getQuantity()).append(" ").append(ingredient.getUnit()).append(")");
+            
+            // Clean up unit display - handle cases like "1 package" when quantity is > 1
+            String displayUnit = ingredient.getUnit();
+            double quantity = ingredient.getQuantity();
+            
+            // If unit starts with "1 " and quantity is not 1, remove the "1 " prefix
+            if (displayUnit.startsWith("1 ") && quantity != 1.0) {
+                displayUnit = displayUnit.substring(2); // Remove "1 " prefix
+                if (quantity > 1) {
+                    displayUnit += "s"; // Add plural suffix for multiple items
+                }
+            }
+            
+            details.append(" (").append(ingredient.getQuantity()).append(" ").append(displayUnit).append(")");
             details.append("\n");
         }
         
@@ -524,6 +550,7 @@ public class MealLogMediator implements
                 for (int i = 0; i < ingredientNames.size(); i++) {
                     String name = ingredientNames.get(i);
                     double quantity = (quantities != null && i < quantities.size()) ? quantities.get(i) : 100.0;
+                    // Use "g" as fallback for backward compatibility, but this constructor should rarely be used now
                     this.ingredients.add(new ca.nutrisci.application.dto.IngredientDTO(name, quantity, "g"));
                 }
             }

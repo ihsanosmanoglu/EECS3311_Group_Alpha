@@ -179,14 +179,27 @@ public class DatabaseManager {
                 "profile_id VARCHAR(36) NOT NULL, " +
                 "date DATE NOT NULL, " +
                 "meal_type VARCHAR(20) NOT NULL, " +
-                "ingredients TEXT NOT NULL, " +
-                "quantities TEXT NOT NULL, " +
+                "ingredients_json TEXT, " +
+                "ingredients TEXT, " +
+                "quantities TEXT, " +
                 "calories DOUBLE DEFAULT 0, " +
                 "protein DOUBLE DEFAULT 0, " +
                 "carbs DOUBLE DEFAULT 0, " +
                 "fat DOUBLE DEFAULT 0, " +
                 "fiber DOUBLE DEFAULT 0, " +
                 "created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)");
+            
+            // Add ingredients_json column to existing meals table if it doesn't exist
+            try {
+                stmt.execute("ALTER TABLE meals ADD COLUMN ingredients_json TEXT");
+                System.out.println("✅ Added ingredients_json column to existing meals table");
+            } catch (SQLException e) {
+                // Column probably already exists, ignore
+                if (!e.getMessage().toLowerCase().contains("already exists") && 
+                    !e.getMessage().toLowerCase().contains("duplicate column")) {
+                    System.err.println("⚠️ Could not add ingredients_json column: " + e.getMessage());
+                }
+            }
             
             System.out.println("✅ Manual table creation completed");
             

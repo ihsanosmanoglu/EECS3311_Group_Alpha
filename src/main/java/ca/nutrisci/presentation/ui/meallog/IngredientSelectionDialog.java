@@ -541,8 +541,12 @@ public class IngredientSelectionDialog extends JDialog {
             }
             
             if (!alreadySelected) {
+                // Get the most appropriate default unit and quantity for this ingredient
+                String defaultUnit = getBestDefaultUnit(ingredientName);
+                double defaultQuantity = getBestDefaultQuantity(ingredientName, defaultUnit);
+                
                 // Show quantity and unit selection dialog
-                EditableIngredientInfo info = showIngredientEditDialog(ingredientName, 100.0, "g", false);
+                EditableIngredientInfo info = showIngredientEditDialog(ingredientName, defaultQuantity, defaultUnit, false);
                 if (info != null) {
                     selectedModel.addElement(info);
                 }
@@ -568,7 +572,10 @@ public class IngredientSelectionDialog extends JDialog {
             }
             
             if (!alreadySelected) {
-                EditableIngredientInfo info = new EditableIngredientInfo(ingredientName, 100.0, "g");
+                // Use smart defaults even for quick add
+                String defaultUnit = getBestDefaultUnit(ingredientName);
+                double defaultQuantity = getBestDefaultQuantity(ingredientName, defaultUnit);
+                EditableIngredientInfo info = new EditableIngredientInfo(ingredientName, defaultQuantity, defaultUnit);
                 selectedModel.addElement(info);
             }
         }
@@ -739,23 +746,220 @@ public class IngredientSelectionDialog extends JDialog {
     }
     
     // Helper methods for ingredient data
+    
+    /**
+     * Get common ingredients based on meal type - ALL ingredients verified to exist in CNF database
+     */
     private String[] getCommonIngredients(String mealType) {
         switch (mealType.toLowerCase()) {
             case "breakfast":
-                return new String[]{"eggs", "bread", "butter", "milk", "banana", "orange", "oats", "yogurt", 
-                                  "cereal", "apple", "strawberries", "cheese", "olive oil"};
+                return new String[]{"Egg, chicken, dried, whole", "Bread, white, commercial", "Butter, unsalted", 
+                                  "Milk, fluid, whole, pasteurized, homogenized, 3.25% M.F.", "Banana, raw", 
+                                  "Apple, raw, with skin", "Cheese, cheddar"};
             case "lunch":
-                return new String[]{"chicken", "rice", "pasta", "tomato", "lettuce", "cheese", "bread", 
-                                  "bell pepper", "onion", "cucumber", "carrots", "salmon", "tuna", "beans"};
+                return new String[]{"Chicken, roasting, meat only, raw", "Tomato, red, ripe, raw, year round average", 
+                                  "Cheese, cheddar", "Bread, white, commercial", "Onion, raw", "Cucumber, raw", 
+                                  "Carrot, raw", "Tuna, light, canned in water, drained solids", "Beans, kidney, sprouted, raw"};
             case "dinner":
-                return new String[]{"beef", "fish", "chicken", "broccoli", "carrots", "onion", "rice", "pasta", 
-                                  "quinoa", "spinach", "bell pepper", "olive oil", "salmon", "potatoes"};
+                return new String[]{"Beef, ground, lean, raw", "Chicken, roasting, meat only, raw", 
+                                  "Broccoli, raw", "Carrot, raw", "Onion, raw", "Spinach, raw", 
+                                  "Vegetable oil, olive", "Potato, flesh and skin, raw"};
             case "snack":
-                return new String[]{"apple", "banana", "almonds", "walnuts", "yogurt", "cheese", "orange", 
-                                  "berries", "peanuts", "crackers", "milk"};
+                return new String[]{"Apple, raw, with skin", "Banana, raw", "Cheese, cheddar", 
+                                  "Milk, fluid, whole, pasteurized, homogenized, 3.25% M.F."};
             default:
-                return new String[]{"apple", "banana", "chicken", "rice", "bread", "milk", "eggs", "cheese", 
-                                  "tomato", "lettuce", "pasta", "beef", "fish", "yogurt", "oats", "olive oil"};
+                return new String[]{"Apple, raw, with skin", "Banana, raw", "Chicken, roasting, meat only, raw", 
+                                  "Bread, white, commercial", "Milk, fluid, whole, pasteurized, homogenized, 3.25% M.F.", 
+                                  "Cheese, cheddar", "Tomato, red, ripe, raw, year round average", "Beef, ground, lean, raw", 
+                                  "Vegetable oil, olive"};
         }
+    }
+    
+    /**
+     * Get the best default unit for an ingredient based on CNF data and food type
+     */
+    private String getBestDefaultUnit(String ingredientName) {
+        try {
+            // First, try to get the food ID and available units from CNF
+            int foodId = nutritionGateway.getFoodId(ingredientName);
+            if (foodId > 0 && unitConversionService.isInitialized()) {
+                List<String> availableUnits = unitConversionService.getAvailableUnitsForFood(foodId);
+                if (!availableUnits.isEmpty()) {
+                    // Find the most appropriate unit based on food type
+                    String smartDefault = findSmartDefaultUnit(ingredientName, availableUnits);
+                    if (smartDefault != null) {
+                        return smartDefault;
+                    }
+                    
+                    // Otherwise, use the first non-gram unit if available
+                    for (String unit : availableUnits) {
+                        if (!unit.toLowerCase().contains("g") && !unit.equals("1 g")) {
+                            return unit;
+                        }
+                    }
+                    
+                    // Fall back to first available unit
+                    return availableUnits.get(0);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error getting best default unit for " + ingredientName + ": " + e.getMessage());
+        }
+        
+        // Smart fallback based on ingredient name
+        return getSmartFallbackUnit(ingredientName);
+    }
+    
+    /**
+     * Get the best default quantity for an ingredient and unit
+     */
+    private double getBestDefaultQuantity(String ingredientName, String unit) {
+        String lowerIngredient = ingredientName.toLowerCase();
+        String lowerUnit = unit.toLowerCase();
+        
+        // Default quantities based on unit type
+        if (lowerUnit.contains("slice")) {
+            return 1.0;
+        } else if (lowerUnit.contains("cup")) {
+            return 0.5; // Half cup
+        } else if (lowerUnit.contains("tbsp") || lowerUnit.contains("15ml")) {
+            return 1.0;
+        } else if (lowerUnit.contains("tsp") || lowerUnit.contains("5ml")) {
+            return 1.0;
+        } else if (lowerUnit.contains("piece") || lowerUnit.contains("item") || lowerUnit.contains("serving")) {
+            return 1.0;
+        } else if (lowerUnit.contains("ml")) {
+            return 250.0; // Default to 1 cup equivalent
+        } else if (lowerUnit.contains("g")) {
+            // Smart gram defaults based on food type
+            if (lowerIngredient.contains("spice") || lowerIngredient.contains("herb") || 
+                lowerIngredient.contains("pepper") || lowerIngredient.contains("salt")) {
+                return 2.0; // 2 grams for spices
+            } else if (lowerIngredient.contains("oil") || lowerIngredient.contains("butter")) {
+                return 15.0; // 1 tablespoon equivalent
+            } else if (lowerIngredient.contains("meat") || lowerIngredient.contains("chicken") || 
+                      lowerIngredient.contains("beef") || lowerIngredient.contains("pork")) {
+                return 150.0; // Typical serving size
+            } else if (lowerIngredient.contains("vegetable") || lowerIngredient.contains("fruit")) {
+                return 100.0; // Medium serving
+            } else {
+                return 100.0; // Default 100g
+            }
+        } else {
+            return 1.0; // Default to 1 unit
+        }
+    }
+    
+    /**
+     * Find the most appropriate unit based on food type and available options
+     */
+    private String findSmartDefaultUnit(String ingredientName, List<String> availableUnits) {
+        String lowerIngredient = ingredientName.toLowerCase();
+        
+        // Bread/baked goods - prefer slices
+        if (lowerIngredient.contains("bread") || lowerIngredient.contains("toast") || 
+            lowerIngredient.contains("baguette") || lowerIngredient.contains("roll")) {
+            for (String unit : availableUnits) {
+                if (unit.toLowerCase().contains("slice")) {
+                    return unit;
+                }
+            }
+        }
+        
+        // Cheese - prefer slices or pieces
+        if (lowerIngredient.contains("cheese") && !lowerIngredient.contains("cottage")) {
+            for (String unit : availableUnits) {
+                if (unit.toLowerCase().contains("slice") || unit.toLowerCase().contains("piece")) {
+                    return unit;
+                }
+            }
+        }
+        
+        // Fruits - prefer pieces/items
+        if (lowerIngredient.contains("apple") || lowerIngredient.contains("banana") || 
+            lowerIngredient.contains("orange") || lowerIngredient.contains("pear")) {
+            for (String unit : availableUnits) {
+                if (unit.toLowerCase().contains("fruit") || unit.toLowerCase().contains("piece") || 
+                    unit.toLowerCase().contains("item") || unit.toLowerCase().contains("medium")) {
+                    return unit;
+                }
+            }
+        }
+        
+        // Vegetables that are typically measured in pieces
+        if (lowerIngredient.contains("carrot") || lowerIngredient.contains("potato") || 
+            lowerIngredient.contains("onion") || lowerIngredient.contains("tomato")) {
+            for (String unit : availableUnits) {
+                if (unit.toLowerCase().contains("medium") || unit.toLowerCase().contains("piece") || 
+                    unit.toLowerCase().contains("item")) {
+                    return unit;
+                }
+            }
+        }
+        
+        // Liquids - prefer mL or cups
+        if (lowerIngredient.contains("milk") || lowerIngredient.contains("juice") || 
+            lowerIngredient.contains("water") || lowerIngredient.contains("oil") || 
+            lowerIngredient.contains("sauce") || lowerIngredient.contains("liquid")) {
+            for (String unit : availableUnits) {
+                if (unit.toLowerCase().contains("ml") || unit.toLowerCase().contains("cup")) {
+                    return unit;
+                }
+            }
+        }
+        
+        return null; // No smart default found
+    }
+    
+    /**
+     * Get smart fallback unit when CNF data is not available
+     */
+    private String getSmartFallbackUnit(String ingredientName) {
+        String lowerIngredient = ingredientName.toLowerCase();
+        
+        // CNF-specific patterns
+        if (lowerIngredient.contains("bread") || lowerIngredient.contains("toast")) {
+            return "1 slice";
+        }
+        
+        // Raw fruits
+        if (lowerIngredient.contains("apple") || lowerIngredient.contains("banana") || 
+            lowerIngredient.contains("orange") || lowerIngredient.contains("pear")) {
+            return "1 medium";
+        }
+        
+        // Cheese products
+        if (lowerIngredient.contains("cheese") && !lowerIngredient.contains("cottage")) {
+            return "1 slice";
+        }
+        
+        // Raw vegetables
+        if (lowerIngredient.contains("carrot") || lowerIngredient.contains("potato") || 
+            lowerIngredient.contains("onion") || lowerIngredient.contains("tomato") ||
+            lowerIngredient.contains("cucumber") || lowerIngredient.contains("broccoli") ||
+            lowerIngredient.contains("spinach")) {
+            return "1 cup";
+        }
+        
+        // Liquids and oils
+        if (lowerIngredient.contains("milk") || lowerIngredient.contains("juice") || 
+            lowerIngredient.contains("water") || lowerIngredient.contains("oil")) {
+            return "250ml";
+        }
+        
+        // Meat and protein
+        if (lowerIngredient.contains("chicken") || lowerIngredient.contains("beef") || 
+            lowerIngredient.contains("fish") || lowerIngredient.contains("salmon") ||
+            lowerIngredient.contains("tuna")) {
+            return "100g";
+        }
+        
+        // Egg products
+        if (lowerIngredient.contains("egg")) {
+            return "1 large";
+        }
+        
+        // Default to grams for everything else
+        return "g";
     }
 } 

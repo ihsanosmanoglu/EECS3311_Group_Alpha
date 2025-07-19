@@ -230,7 +230,8 @@ public class UnitConversionService {
         // Convert: quantity * conversionFactor = grams
         double gramsResult = quantity * conversionFactor;
         System.out.println("🔄 Converted " + quantity + " " + sourceUnit + " to " + 
-                          String.format("%.2f", gramsResult) + "g for food ID " + foodId);
+                          String.format("%.2f", gramsResult) + "g for food ID " + foodId + 
+                          " (conversion factor: " + conversionFactor + ")");
         
         return gramsResult;
     }
@@ -248,11 +249,39 @@ public class UnitConversionService {
      * Find measure ID by unit name
      */
     private Integer findMeasureIdByName(String unitName) {
+        String cleanUnitName = unitName.trim();
+        
+        // First try exact match
         for (Map.Entry<Integer, String> entry : measureIdToName.entrySet()) {
-            if (entry.getValue().equalsIgnoreCase(unitName.trim())) {
+            if (entry.getValue().equalsIgnoreCase(cleanUnitName)) {
+                System.out.println("🎯 Exact unit match found: '" + cleanUnitName + "' -> measure ID " + entry.getKey());
                 return entry.getKey();
             }
         }
+        
+        // If no exact match, try partial matching for common cases
+        // Handle cases like "package" matching "1 package"
+        for (Map.Entry<Integer, String> entry : measureIdToName.entrySet()) {
+            String measureName = entry.getValue().toLowerCase();
+            String searchUnit = cleanUnitName.toLowerCase();
+            
+            // Check if the unit name contains the search term or vice versa
+            if (measureName.contains(searchUnit) || searchUnit.contains(measureName.replace("1 ", ""))) {
+                System.out.println("🎯 Partial unit match found: '" + cleanUnitName + "' matched with '" + entry.getValue() + "' -> measure ID " + entry.getKey());
+                return entry.getKey();
+            }
+        }
+        
+        System.err.println("❌ No unit match found for: '" + cleanUnitName + "'");
+        System.err.println("Available units for debugging:");
+        for (Map.Entry<Integer, String> entry : measureIdToName.entrySet()) {
+            if (entry.getValue().toLowerCase().contains("package") || 
+                entry.getValue().toLowerCase().contains("slice") ||
+                entry.getValue().toLowerCase().contains("cup")) {
+                System.err.println("  - " + entry.getKey() + ": '" + entry.getValue() + "'");
+            }
+        }
+        
         return null;
     }
 
